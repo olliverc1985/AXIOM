@@ -1,4 +1,8 @@
-//! AXIOM Bench — Phase 3: multidirectional traversal + feedback loops.
+//! AXIOM Bench — Phase 4: weight learning + temporal geometry.
+//!
+//! Four-pass bench: synthetic (learning) → text → synthetic (learning) → text.
+//! Hebbian weight learning active during synthetic passes (lr=0.001).
+//! Weight drift logged every 100 iterations. Recalibrate between passes.
 //!
 //! Usage:
 //!   cargo run --release -p axiom-bench              # terminal only
@@ -218,17 +222,41 @@ fn count_directions(
     (forward, lateral, feedback, temporal)
 }
 
-/// Run a bench pass and return (entries, tier_counts).
+/// Weight drift snapshot at a point in time.
+#[derive(Serialize, Deserialize, Clone)]
+struct WeightDriftEntry {
+    iteration: usize,
+    weight_norm: f32,
+}
+
+/// Synthetic pass results.
+struct SyntheticPassResult {
+    entries: Vec<BenchLogEntry>,
+    tier_counts: HashMap<String, usize>,
+    total_cost: f32,
+    total_confidence: f32,
+    forward: usize,
+    lateral: usize,
+    feedback: usize,
+    temporal: usize,
+    lateral_count: u32,
+    lateral_prevented: u32,
+    feedback_signals: usize,
+    weight_drift: Vec<WeightDriftEntry>,
+}
+
+/// Run a synthetic bench pass with optional Hebbian learning and weight drift tracking.
 fn run_synthetic_pass(
     resolver: &mut HierarchicalResolver,
     input_dim: usize,
     iterations: usize,
+    learning_rate: f32,
     progress: &ProgressBar,
     stats_bar: &ProgressBar,
     dashboard_mode: bool,
     state: &Arc<Mutex<DashboardState>>,
     bench_start: &Instant,
-) -> (Vec<BenchLogEntry>, HashMap<String, usize>, f32, f32, usize, usize, usize, usize, u32, u32, usize) {
+) -> SyntheticPassResult {
     let mut tier_counts: HashMap<String, usize> = HashMap::new();
     tier_counts.insert("Surface".to_string(), 0);
     tier_counts.insert("Reasoning".to_string(), 0);
@@ -243,11 +271,23 @@ fn run_synthetic_pass(
     let mut total_lateral_count = 0u32;
     let mut total_lateral_prevented = 0u32;
     let mut total_feedback_signals = 0usize;
+    let mut weight_drift: Vec<WeightDriftEntry> = Vec::new();
+
+    // Initial weight norm
+    weight_drift.push(WeightDriftEntry {
+        iteration: 0,
+        weight_norm: resolver.total_weight_norm(),
+    });
 
     for i in 0..iterations {
         let input = generate_input(i, input_dim);
         let input_hash = input.content_hash();
         let result = resolver.resolve(&input);
+
+        // Hebbian learning
+        if learning_rate > 0.0 {
+            resolver.learn(&input, &result, learning_rate);
+        }
 
         let tier_name = result.tier_reached.name().to_string();
         *tier_counts.get_mut(&tier_name).unwrap() += 1;
@@ -288,6 +328,14 @@ fn run_synthetic_pass(
             winning_path: result.winning_path.clone(),
         });
 
+        // Weight drift logging every 100 iterations
+        if learning_rate > 0.0 && (i + 1) % 100 == 0 {
+            weight_drift.push(WeightDriftEntry {
+                iteration: i + 1,
+                weight_norm: resolver.total_weight_norm(),
+            });
+        }
+
         if dashboard_mode {
             let mut s = state.lock().unwrap();
             s.iteration = i + 1;
@@ -315,7 +363,7 @@ fn run_synthetic_pass(
             });
         }
 
-        if i % 10 == 0 || i == iterations - 1 {
+        if i % 100 == 0 || i == iterations - 1 {
             let done = i + 1;
             let surface_pct =
                 *tier_counts.get("Surface").unwrap() as f32 / done as f32 * 100.0;
@@ -332,44 +380,48 @@ fn run_synthetic_pass(
             ));
         }
 
-        if dashboard_mode && i % 10 == 9 {
-            std::thread::sleep(Duration::from_millis(20));
+        if dashboard_mode && i % 100 == 99 {
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
 
-    (
+    SyntheticPassResult {
         entries,
         tier_counts,
         total_cost,
         total_confidence,
-        total_forward,
-        total_lateral_steps,
-        total_feedback_steps,
-        total_temporal_steps,
-        total_lateral_count,
-        total_lateral_prevented,
-        total_feedback_signals,
-    )
+        forward: total_forward,
+        lateral: total_lateral_steps,
+        feedback: total_feedback_steps,
+        temporal: total_temporal_steps,
+        lateral_count: total_lateral_count,
+        lateral_prevented: total_lateral_prevented,
+        feedback_signals: total_feedback_signals,
+        weight_drift,
+    }
 }
 
-/// Run a text pass and return (entries, tier_counts, complexity_tiers, direction_counts).
+/// Text pass results.
+struct TextPassResult {
+    entries: Vec<TextLogEntry>,
+    tier_counts: HashMap<String, usize>,
+    complexity_tiers: HashMap<String, HashMap<String, usize>>,
+    forward: usize,
+    lateral: usize,
+    feedback: usize,
+    temporal: usize,
+    lateral_count: u32,
+    lateral_prevented: u32,
+    feedback_signals: usize,
+}
+
+/// Run a text pass and return structured results.
 fn run_text_pass(
     resolver: &mut HierarchicalResolver,
     encoder: &Encoder,
     sentences: &[(&str, &str)],
     pass_label: &str,
-) -> (
-    Vec<TextLogEntry>,
-    HashMap<String, usize>,
-    HashMap<String, HashMap<String, usize>>,
-    usize,
-    usize,
-    usize,
-    usize,
-    u32,
-    u32,
-    usize,
-) {
+) -> TextPassResult {
     let mut text_entries: Vec<TextLogEntry> = Vec::new();
     let mut text_tiers: HashMap<String, usize> = HashMap::new();
     text_tiers.insert("Surface".to_string(), 0);
@@ -438,18 +490,18 @@ fn run_text_pass(
 
     let _ = pass_label; // used for display outside
 
-    (
-        text_entries,
-        text_tiers,
+    TextPassResult {
+        entries: text_entries,
+        tier_counts: text_tiers,
         complexity_tiers,
-        total_forward,
-        total_lateral,
-        total_feedback,
-        total_temporal,
-        total_lateral_count,
-        total_lateral_prevented,
-        total_feedback_signals,
-    )
+        forward: total_forward,
+        lateral: total_lateral,
+        feedback: total_feedback,
+        temporal: total_temporal,
+        lateral_count: total_lateral_count,
+        lateral_prevented: total_lateral_prevented,
+        feedback_signals: total_feedback_signals,
+    }
 }
 
 fn print_tier_summary(label: &str, tier_counts: &HashMap<String, usize>, total: usize) {
@@ -508,6 +560,63 @@ fn print_complexity_breakdown(complexity_tiers: &HashMap<String, HashMap<String,
     }
 }
 
+fn print_synth_results(
+    label: &str,
+    result: &SyntheticPassResult,
+    iterations: usize,
+    cache_rate: f32,
+    elapsed: Duration,
+) {
+    println!();
+    println!("  {} results ({:.2?}):", label, elapsed);
+    print_tier_summary(label, &result.tier_counts, iterations);
+    println!(
+        "  Cache hit rate: {:.1}%  Avg cost: {:.4}  Avg conf: {:.4}",
+        cache_rate,
+        result.total_cost / iterations as f32,
+        result.total_confidence / iterations as f32,
+    );
+    print_direction_summary(result.forward, result.lateral, result.feedback, result.temporal);
+    println!(
+        "  Lateral: {} attempted, {} prevented escalation",
+        result.lateral_count, result.lateral_prevented
+    );
+    println!("  Feedback signals: {}", result.feedback_signals);
+
+    if !result.weight_drift.is_empty() {
+        let first = result.weight_drift.first().unwrap().weight_norm;
+        let last = result.weight_drift.last().unwrap().weight_norm;
+        let drift = (last - first).abs();
+        let drift_pct = if first > 0.0 { drift / first * 100.0 } else { 0.0 };
+        println!(
+            "  Weight drift: {:.4} → {:.4} (delta {:.4}, {:.2}%)",
+            first, last, drift, drift_pct
+        );
+    }
+}
+
+fn print_text_results(label: &str, result: &TextPassResult, n_sentences: usize) {
+    println!();
+    print_tier_summary(label, &result.tier_counts, n_sentences);
+    println!();
+    print_complexity_breakdown(&result.complexity_tiers);
+    println!();
+    print_direction_summary(result.forward, result.lateral, result.feedback, result.temporal);
+    println!(
+        "  Lateral: {} attempted, {} prevented escalation",
+        result.lateral_count, result.lateral_prevented
+    );
+    println!("  Feedback signals: {}", result.feedback_signals);
+}
+
+fn write_json_log(path: &str, entries: &impl Serialize) {
+    let log_file = File::create(path).unwrap_or_else(|e| panic!("Failed to create {}: {}", path, e));
+    let mut writer = BufWriter::new(log_file);
+    let json = serde_json::to_string_pretty(entries).unwrap();
+    writeln!(writer, "{}", json).unwrap();
+    writer.flush().unwrap();
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let dashboard_mode = args.contains(&"--dashboard".to_string());
@@ -518,14 +627,15 @@ fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(8080);
 
-    println!("╔══════════════════════════════════════════════════╗");
-    println!("║           AXIOM Phase 3 — Bench Loop            ║");
-    println!("║   Multidirectional Traversal + Feedback Loops   ║");
-    println!("╚══════════════════════════════════════════════════╝");
+    println!("╔══════════════════════════════════════════════════════╗");
+    println!("║        AXIOM Phase 4 — Weight Learning Bench        ║");
+    println!("║  Hebbian Learning + Temporal Geometry + Four Passes  ║");
+    println!("╚══════════════════════════════════════════════════════╝");
     println!();
 
     let input_dim = 64;
-    let iterations = 1000;
+    let synth_iterations = 10_000;
+    let learning_rate = 0.001;
 
     // Load or default config
     let config = AxiomConfig::load_or_default();
@@ -547,10 +657,20 @@ fn main() {
         println!("    rationale: {}", config.rationale);
     }
     println!();
-    println!("  Config: dim={}, iterations={}", input_dim, iterations);
+    println!("  Config: dim={}, synth_iterations={}, learning_rate={}", input_dim, synth_iterations, learning_rate);
+
+    // Build encoder early (needed for text passes and recalibration)
+    let sentences = test_sentences();
+    let mut tokeniser = Tokeniser::default_tokeniser();
+    for (sentence, _) in &sentences {
+        tokeniser.tokenise(sentence);
+    }
+    tokeniser.save_vocab("axiom_vocab.json").ok();
+    let encoder = Encoder::new(input_dim, tokeniser);
+    println!("  Vocabulary: {} tokens", encoder.tokeniser.vocab_size());
 
     // Dashboard setup
-    let state = Arc::new(Mutex::new(DashboardState::new(iterations)));
+    let state = Arc::new(Mutex::new(DashboardState::new(synth_iterations)));
     if dashboard_mode {
         dashboard::start_server(Arc::clone(&state), port);
         println!();
@@ -563,21 +683,23 @@ fn main() {
     // Build resolver from config (includes calibration pass)
     let mut resolver = HierarchicalResolver::build_with_axiom_config(input_dim, &config);
     let weight_count = resolver.total_weight_count();
+    let initial_weight_norm = resolver.total_weight_norm();
     println!("  Total trainable parameters: {}", weight_count);
     println!(
         "  Calibrated thresholds: surface={:.4}  reasoning={:.4}",
         resolver.config.surface_confidence_threshold,
         resolver.config.reasoning_confidence_threshold,
     );
+    println!("  Initial weight norm: {:.4}", initial_weight_norm);
     println!();
 
     // ═══════════════════════════════════════════════════════
-    // PASS 1 — Synthetic
+    // PASS 1 — Synthetic (learning active)
     // ═══════════════════════════════════════════════════════
-    println!("─── Pass 1: Synthetic ({} iterations) ───", iterations);
+    println!("─── Pass 1: Synthetic ({} iterations, lr={}) ───", synth_iterations, learning_rate);
 
     let multi = MultiProgress::new();
-    let progress = multi.add(ProgressBar::new(iterations as u64));
+    let progress = multi.add(ProgressBar::new(synth_iterations as u64));
     progress.set_style(
         ProgressStyle::with_template(
             "{spinner:.cyan} [{elapsed_precise}] [{bar:40.green/dark_gray}] {pos}/{len} {msg}",
@@ -589,101 +711,169 @@ fn main() {
     stats_bar.set_style(ProgressStyle::with_template("{spinner:.yellow} {msg}").unwrap());
 
     let bench_start = Instant::now();
-    let (entries, tier_counts, total_cost, total_confidence, fwd, lat, fb, tmp, lat_count, lat_prev, fb_signals) =
-        run_synthetic_pass(
-            &mut resolver,
-            input_dim,
-            iterations,
-            &progress,
-            &stats_bar,
-            dashboard_mode,
-            &state,
-            &bench_start,
-        );
-    let synth_elapsed = bench_start.elapsed();
+    let pass1 = run_synthetic_pass(
+        &mut resolver,
+        input_dim,
+        synth_iterations,
+        learning_rate,
+        &progress,
+        &stats_bar,
+        dashboard_mode,
+        &state,
+        &bench_start,
+    );
+    let pass1_elapsed = bench_start.elapsed();
 
     progress.finish_with_message("done");
     stats_bar.finish_and_clear();
 
-    // Write synthetic log
-    {
-        let log_file = File::create("axiom_bench_log.json").expect("Failed to create log file");
-        let mut writer = BufWriter::new(log_file);
-        let json = serde_json::to_string(&entries).unwrap();
-        writeln!(writer, "{}", json).unwrap();
-        writer.flush().unwrap();
-    }
-
-    println!();
-    println!("  Synthetic results ({:.2?}):", synth_elapsed);
-    print_tier_summary("Synthetic", &tier_counts, iterations);
-    println!(
-        "  Cache hit rate: {:.1}%  Avg cost: {:.4}  Avg conf: {:.4}",
-        resolver.cache_hit_rate() * 100.0,
-        total_cost / iterations as f32,
-        total_confidence / iterations as f32,
-    );
-    print_direction_summary(fwd, lat, fb, tmp);
-    println!(
-        "  Lateral: {} attempted, {} prevented escalation",
-        lat_count, lat_prev
-    );
-    println!("  Feedback signals: {}", fb_signals);
+    write_json_log("axiom_synth_pass1.json", &pass1.entries);
+    print_synth_results("Synthetic Pass 1", &pass1, synth_iterations, resolver.cache_hit_rate() * 100.0, pass1_elapsed);
     println!();
 
     // ═══════════════════════════════════════════════════════
-    // PASS 2 — Text
+    // RECALIBRATE after Pass 1
     // ═══════════════════════════════════════════════════════
-    let sentences = test_sentences();
-    println!("─── Pass 2: Text ({} sentences) ───", sentences.len());
+    println!("─── Recalibration after learning ───");
+    resolver.calibrate(input_dim, 0.65, 0.35);
+    resolver.rebuild_graph_edges();
+    println!(
+        "  New thresholds: surface={:.4}  reasoning={:.4}",
+        resolver.config.surface_confidence_threshold,
+        resolver.config.reasoning_confidence_threshold,
+    );
+    println!();
+
+    // ═══════════════════════════════════════════════════════
+    // PASS 2 — Text (no learning, evaluation only)
+    // ═══════════════════════════════════════════════════════
+    println!("─── Pass 2: Text ({} sentences, post-learning) ───", sentences.len());
 
     // Reset cache for text pass
-    resolver.cache =
-        axiom_core::cache::EmbeddingCache::new(256, config.cache_similarity_threshold);
+    resolver.cache = axiom_core::cache::EmbeddingCache::new(256, config.cache_similarity_threshold);
 
-    let mut tokeniser = Tokeniser::default_tokeniser();
-    for (sentence, _) in &sentences {
-        tokeniser.tokenise(sentence);
-    }
-    tokeniser.save_vocab("axiom_vocab.json").ok();
-    println!(
-        "  Vocabulary: {} tokens → axiom_vocab.json",
-        tokeniser.vocab_size()
-    );
-
-    let encoder = Encoder::new(input_dim, tokeniser);
-
-    let (text_entries, text_tiers, complexity_tiers, t_fwd, t_lat, t_fb, t_tmp, t_lat_count, t_lat_prev, t_fb_signals) =
-        run_text_pass(&mut resolver, &encoder, &sentences, "Pass 2");
-
-    // Write text log
-    {
-        let log_file = File::create("axiom_text_log.json").expect("Failed to create text log");
-        let mut writer = BufWriter::new(log_file);
-        let json = serde_json::to_string_pretty(&text_entries).unwrap();
-        writeln!(writer, "{}", json).unwrap();
-        writer.flush().unwrap();
-    }
-
+    let pass2 = run_text_pass(&mut resolver, &encoder, &sentences, "Pass 2");
+    write_json_log("axiom_text_pass2.json", &pass2.entries);
+    print_text_results("Text Pass 2 (post-learning)", &pass2, sentences.len());
     println!();
-    print_tier_summary("Text", &text_tiers, sentences.len());
-    println!();
-    print_complexity_breakdown(&complexity_tiers);
-    println!();
-    print_direction_summary(t_fwd, t_lat, t_fb, t_tmp);
-    println!(
-        "  Lateral: {} attempted, {} prevented escalation",
-        t_lat_count, t_lat_prev
-    );
-    println!("  Feedback signals: {}", t_fb_signals);
 
     // ═══════════════════════════════════════════════════════
-    // AUTO-TUNER (between Pass 2 and Pass 3)
+    // PASS 3 — Synthetic (learning active, second round)
     // ═══════════════════════════════════════════════════════
+    println!("─── Pass 3: Synthetic ({} iterations, lr={}) ───", synth_iterations, learning_rate);
+
+    // Reset cache for second synthetic pass
+    resolver.cache = axiom_core::cache::EmbeddingCache::new(256, config.cache_similarity_threshold);
+
+    let progress3 = multi.add(ProgressBar::new(synth_iterations as u64));
+    progress3.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.cyan} [{elapsed_precise}] [{bar:40.green/dark_gray}] {pos}/{len} {msg}",
+        )
+        .unwrap()
+        .progress_chars("█▓▒░  "),
+    );
+    let stats_bar3 = multi.add(ProgressBar::new_spinner());
+    stats_bar3.set_style(ProgressStyle::with_template("{spinner:.yellow} {msg}").unwrap());
+
+    let pass3_start = Instant::now();
+    let pass3 = run_synthetic_pass(
+        &mut resolver,
+        input_dim,
+        synth_iterations,
+        learning_rate,
+        &progress3,
+        &stats_bar3,
+        dashboard_mode,
+        &state,
+        &pass3_start,
+    );
+    let pass3_elapsed = pass3_start.elapsed();
+
+    progress3.finish_with_message("done");
+    stats_bar3.finish_and_clear();
+
+    write_json_log("axiom_synth_pass3.json", &pass3.entries);
+    print_synth_results("Synthetic Pass 3", &pass3, synth_iterations, resolver.cache_hit_rate() * 100.0, pass3_elapsed);
+    println!();
+
+    // ═══════════════════════════════════════════════════════
+    // PASS 4 — Text (no learning, final evaluation)
+    // ═══════════════════════════════════════════════════════
+    println!("─── Pass 4: Text ({} sentences, post-learning x2) ───", sentences.len());
+
+    // Reset cache for final text pass
+    resolver.cache = axiom_core::cache::EmbeddingCache::new(256, config.cache_similarity_threshold);
+
+    // Recalibrate again after Pass 3
+    resolver.calibrate(input_dim, 0.65, 0.35);
+    resolver.rebuild_graph_edges();
+    println!(
+        "  Final thresholds: surface={:.4}  reasoning={:.4}",
+        resolver.config.surface_confidence_threshold,
+        resolver.config.reasoning_confidence_threshold,
+    );
+
+    let pass4 = run_text_pass(&mut resolver, &encoder, &sentences, "Pass 4");
+    write_json_log("axiom_text_pass4.json", &pass4.entries);
+    print_text_results("Text Pass 4 (post-learning x2)", &pass4, sentences.len());
+    println!();
+
+    // ═══════════════════════════════════════════════════════
+    // PASS 2 vs PASS 4 Comparison
+    // ═══════════════════════════════════════════════════════
+    println!("─── Text Comparison: Pass 2 → Pass 4 ───");
+    for tier in &["Surface", "Reasoning", "Deep"] {
+        let p2 = pass2.tier_counts.get(*tier).copied().unwrap_or(0);
+        let p4 = pass4.tier_counts.get(*tier).copied().unwrap_or(0);
+        let delta = p4 as i32 - p2 as i32;
+        let arrow = if delta > 0 { "+" } else if delta < 0 { "" } else { " " };
+        println!(
+            "    {:>10}: {:>2} → {:>2} ({}{:>2})",
+            tier, p2, p4, arrow, delta
+        );
+    }
+    println!();
+
+    // Per-complexity comparison
+    println!("  Complexity ordering comparison:");
+    for label in &["simple", "moderate", "complex"] {
+        let p2_counts = &pass2.complexity_tiers[*label];
+        let p4_counts = &pass4.complexity_tiers[*label];
+        let p2_n: usize = p2_counts.values().sum();
+        let p4_n: usize = p4_counts.values().sum();
+        let p2_s = if p2_n > 0 { p2_counts["Surface"] as f32 / p2_n as f32 * 100.0 } else { 0.0 };
+        let p4_s = if p4_n > 0 { p4_counts["Surface"] as f32 / p4_n as f32 * 100.0 } else { 0.0 };
+        println!(
+            "    {:>10}: S {:.0}% → S {:.0}%",
+            label, p2_s, p4_s
+        );
+    }
+    println!();
+
+    // ═══════════════════════════════════════════════════════
+    // WEIGHT DRIFT SUMMARY
+    // ═══════════════════════════════════════════════════════
+    println!("─── Weight Drift Summary ───");
+    let final_weight_norm = resolver.total_weight_norm();
+    let total_drift = (final_weight_norm - initial_weight_norm).abs();
+    let total_drift_pct = if initial_weight_norm > 0.0 { total_drift / initial_weight_norm * 100.0 } else { 0.0 };
+    println!("  Initial:  {:.4}", initial_weight_norm);
+    if let Some(last_p1) = pass1.weight_drift.last() {
+        println!("  After P1: {:.4}", last_p1.weight_norm);
+    }
+    if let Some(last_p3) = pass3.weight_drift.last() {
+        println!("  After P3: {:.4}", last_p3.weight_norm);
+    }
+    println!("  Final:    {:.4}", final_weight_norm);
+    println!("  Total drift: {:.4} ({:.2}%)", total_drift, total_drift_pct);
+
+    // Auto-tuner (runs on pass1 synthetic log for config persistence)
     println!();
     println!("─── Auto-Tuner ───");
-
-    let tuned_config = match axiom_tuner::compute_stats("axiom_bench_log.json") {
+    // Write pass1 entries as the bench log for the tuner
+    write_json_log("axiom_bench_log.json", &pass1.entries);
+    match axiom_tuner::compute_stats("axiom_bench_log.json") {
         Ok(stats) => {
             let recommended = axiom_tuner::tune(&stats, &config);
             println!("  Rationale: {}", recommended.rationale);
@@ -691,72 +881,10 @@ fn main() {
                 Ok(()) => println!("  Written: axiom_config.json"),
                 Err(e) => eprintln!("  Failed to write config: {}", e),
             }
-            recommended
         }
         Err(e) => {
             eprintln!("  Tuner error: {}", e);
-            config.clone()
         }
-    };
-
-    // ═══════════════════════════════════════════════════════
-    // PASS 3 — Text again after auto-tuner cycle
-    // ═══════════════════════════════════════════════════════
-    println!();
-    println!("─── Pass 3: Text after tuning ({} sentences) ───", sentences.len());
-
-    // Rebuild resolver with tuned config
-    let mut resolver3 = HierarchicalResolver::build_with_axiom_config(input_dim, &tuned_config);
-
-    let (text_entries3, text_tiers3, complexity_tiers3, t3_fwd, t3_lat, t3_fb, t3_tmp, t3_lat_count, t3_lat_prev, t3_fb_signals) =
-        run_text_pass(&mut resolver3, &encoder, &sentences, "Pass 3");
-
-    // Write pass 3 text log
-    {
-        let log_file =
-            File::create("axiom_text_log_pass3.json").expect("Failed to create pass3 text log");
-        let mut writer = BufWriter::new(log_file);
-        let json = serde_json::to_string_pretty(&text_entries3).unwrap();
-        writeln!(writer, "{}", json).unwrap();
-        writer.flush().unwrap();
-    }
-
-    println!();
-    print_tier_summary("Text (tuned)", &text_tiers3, sentences.len());
-    println!();
-    print_complexity_breakdown(&complexity_tiers3);
-    println!();
-    print_direction_summary(t3_fwd, t3_lat, t3_fb, t3_tmp);
-    println!(
-        "  Lateral: {} attempted, {} prevented escalation",
-        t3_lat_count, t3_lat_prev
-    );
-    println!("  Feedback signals: {}", t3_fb_signals);
-
-    // ═══════════════════════════════════════════════════════
-    // PASS 2 vs PASS 3 comparison
-    // ═══════════════════════════════════════════════════════
-    println!();
-    println!("─── Pass 2 → Pass 3 Comparison ───");
-    for tier in &["Surface", "Reasoning", "Deep"] {
-        let p2 = text_tiers.get(*tier).copied().unwrap_or(0);
-        let p3 = text_tiers3.get(*tier).copied().unwrap_or(0);
-        let delta = p3 as i32 - p2 as i32;
-        let arrow = if delta > 0 {
-            "↑"
-        } else if delta < 0 {
-            "↓"
-        } else {
-            "="
-        };
-        println!(
-            "    {:>10}: {} → {} ({}{})",
-            tier,
-            p2,
-            p3,
-            arrow,
-            delta.abs()
-        );
     }
 
     // Mark dashboard as done
@@ -770,14 +898,20 @@ fn main() {
     println!();
     println!("═══════════════════ FINAL SUMMARY ═══════════════════");
     println!("  Total parameters:   {}", weight_count);
-    println!("  Synthetic log:      axiom_bench_log.json");
-    println!("  Text log (pass 2):  axiom_text_log.json");
-    println!("  Text log (pass 3):  axiom_text_log_pass3.json");
+    println!("  Learning rate:      {}", learning_rate);
+    println!("  Synth iterations:   {} x 2 = {}", synth_iterations, synth_iterations * 2);
+    println!("  Text sentences:     {} x 2 = {}", sentences.len(), sentences.len() * 2);
+    println!("  Weight drift:       {:.4} ({:.2}%)", total_drift, total_drift_pct);
+    println!("  Logs:");
+    println!("    axiom_synth_pass1.json");
+    println!("    axiom_text_pass2.json");
+    println!("    axiom_synth_pass3.json");
+    println!("    axiom_text_pass4.json");
     println!(
-        "  Vocabulary:         axiom_vocab.json ({} tokens)",
+        "  Vocabulary: axiom_vocab.json ({} tokens)",
         encoder.tokeniser.vocab_size()
     );
-    println!("  Config:             axiom_config.json");
+    println!("  Config: axiom_config.json");
     println!("═════════════════════════════════════════════════════");
 
     if dashboard_mode {
