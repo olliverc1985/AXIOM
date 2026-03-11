@@ -29,9 +29,10 @@ pub trait ComputeNode: Send + Sync {
     fn forward(&self, input: &Tensor) -> NodeOutput;
     /// Which reasoning tier this node belongs to.
     fn tier(&self) -> Tier;
-    /// Hebbian weight update: reinforcement (+1) or suppression (-1).
+    /// Oja's rule weight update: reinforcement (+1) or suppression (-1).
     ///
-    /// `input` is the input tensor, `output` is the forward pass output,
+    /// w_ij += lr * signal * output_j * (input_i - output_j * w_ij)
+    /// Self-normalising — converges stably without weight explosion.
     /// `signal` is +1.0 (reinforce) or -1.0 (suppress), `learning_rate` controls step size.
     /// Default implementation is a no-op for nodes without trainable weights.
     fn hebbian_update(
@@ -228,22 +229,27 @@ impl ComputeNode for LinearNode {
         } else {
             self.learning_rate
         };
-        // Hebbian rule: w_ij += signal * lr * input_i * output_j
-        // For each weight connecting input dim i to output dim j
+        // Oja's rule: w_ij += lr * signal * output_j * (input_i - output_j * w_ij)
+        // Self-normalising — converges stably without weight explosion.
         let in_len = self.input_dim.min(input.data.len());
         let out_len = self.output_dim.min(output.data.len());
         for i in 0..in_len {
             for j in 0..out_len {
                 let idx = i * self.output_dim + j;
                 if idx < self.weights.data.len() {
-                    self.weights.data[idx] += signal * lr * input.data[i] * output.data[j];
+                    let w = self.weights.data[idx];
+                    let y = output.data[j];
+                    let x = input.data[i];
+                    self.weights.data[idx] += lr * signal * y * (x - y * w);
                 }
             }
         }
-        // Bias update: b_j += signal * lr * output_j
+        // Bias update with same Oja-style decay: b_j += lr * signal * output_j * (1 - output_j * b_j)
         for j in 0..out_len {
             if j < self.bias.data.len() {
-                self.bias.data[j] += signal * lr * output.data[j];
+                let b = self.bias.data[j];
+                let y = output.data[j];
+                self.bias.data[j] += lr * signal * y * (1.0 - y * b);
             }
         }
     }
@@ -358,39 +364,59 @@ mod tests {
     }
 
     #[test]
-    fn test_hebbian_update() {
+    fn test_oja_reinforcement() {
         let mut node = LinearNode::new("train", 2, 2, Tier::Surface, 0.9);
         let w_before: Vec<f32> = node.weights.data.clone();
         let input = Tensor::from_vec(vec![1.0, 1.0]);
         let output = Tensor::from_vec(vec![1.0, 1.0]);
-        // Reinforcement signal (+1.0) with lr=0.1: w += 0.1 * 1.0 * 1.0 * 1.0 = 0.1
+        // Oja's rule: w += lr * signal * y * (x - y * w)
+        // With x=1, y=1, signal=+1, lr=0.1: delta = 0.1 * 1 * (1 - 1*w) = 0.1*(1-w)
         node.hebbian_update(&input, &output, 1.0, 0.1);
         for (before, after) in w_before.iter().zip(node.weights.data.iter()) {
+            let expected_delta = 0.1 * (1.0 - before);
             assert!(
-                (after - before - 0.1).abs() < 1e-6,
-                "Expected weight to increase by 0.1: before={}, after={}",
-                before,
-                after
+                (after - before - expected_delta).abs() < 1e-6,
+                "Oja delta mismatch: before={}, after={}, expected_delta={}",
+                before, after, expected_delta
             );
         }
     }
 
     #[test]
-    fn test_hebbian_suppression() {
+    fn test_oja_suppression() {
         let mut node = LinearNode::new("suppress", 2, 2, Tier::Surface, 0.9);
         let w_before: Vec<f32> = node.weights.data.clone();
         let input = Tensor::from_vec(vec![1.0, 1.0]);
         let output = Tensor::from_vec(vec![1.0, 1.0]);
-        // Suppression signal (-1.0) with lr=0.1: w -= 0.1 * 1.0 * 1.0 * 1.0 = -0.1
+        // Oja's rule with signal=-1: delta = -0.1 * 1 * (1 - 1*w) = -0.1*(1-w)
         node.hebbian_update(&input, &output, -1.0, 0.1);
         for (before, after) in w_before.iter().zip(node.weights.data.iter()) {
+            let expected_delta = -0.1 * (1.0 - before);
             assert!(
-                (after - before + 0.1).abs() < 1e-6,
-                "Expected weight to decrease by 0.1: before={}, after={}",
-                before,
-                after
+                (after - before - expected_delta).abs() < 1e-6,
+                "Oja suppression delta mismatch: before={}, after={}, expected_delta={}",
+                before, after, expected_delta
             );
         }
+    }
+
+    #[test]
+    fn test_oja_convergence_stability() {
+        // Oja's rule should keep weight norms stable over many iterations
+        let mut node = LinearNode::new("stable", 4, 4, Tier::Surface, 0.9);
+        let initial_norm = node.weight_norm();
+        let input = Tensor::from_vec(vec![0.5, -0.3, 0.8, 0.1]);
+        for _ in 0..1000 {
+            let out = node.forward(&input);
+            node.hebbian_update(&input, &out.tensor, 1.0, 0.001);
+        }
+        let final_norm = node.weight_norm();
+        // Oja's rule self-normalises — norm should not explode
+        assert!(
+            final_norm < initial_norm * 10.0,
+            "Oja norm should stay stable: initial={}, final={}",
+            initial_norm, final_norm
+        );
     }
 
     #[test]
