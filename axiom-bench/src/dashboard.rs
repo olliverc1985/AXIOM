@@ -45,6 +45,7 @@ pub struct DashboardState {
     pub forward_steps: usize,
     pub lateral_steps: usize,
     pub feedback_steps: usize,
+    pub temporal_steps: usize,
     /// Lateral resolution stats.
     pub lateral_prevented: usize,
     /// Total feedback signals emitted.
@@ -70,6 +71,7 @@ impl DashboardState {
             forward_steps: 0,
             lateral_steps: 0,
             feedback_steps: 0,
+            temporal_steps: 0,
             lateral_prevented: 0,
             feedback_signals: 0,
         }

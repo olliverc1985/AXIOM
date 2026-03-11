@@ -10,11 +10,94 @@ use crate::tiers::feedback::FeedbackSignal;
 use crate::tiers::tier::{AxiomConfig, Tier, TierConfig};
 use crate::Tensor;
 
+/// An entry in the temporal buffer — stores a recent resolve result.
+#[derive(Debug, Clone)]
+pub struct TemporalEntry {
+    /// The input tensor that produced this result.
+    pub input: Tensor,
+    /// The output tensor from resolution.
+    pub output: Tensor,
+    /// The confidence of this resolution.
+    pub confidence: f32,
+    /// Which tier resolved this input.
+    pub tier: Tier,
+}
+
+/// Ring buffer of recent resolve results for temporal blending.
+///
+/// When a new input has low Surface confidence, the buffer is checked for
+/// a recent result with cosine similarity > 0.85. If found, the output is
+/// blended: 0.3 * cached + 0.7 * current. This provides recency-weighted
+/// memory without the overhead of full cache lookup.
+pub struct TemporalBuffer {
+    entries: Vec<TemporalEntry>,
+    capacity: usize,
+    head: usize,
+    len: usize,
+}
+
+impl TemporalBuffer {
+    /// Create a new temporal buffer with the given capacity.
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            entries: Vec::with_capacity(capacity),
+            capacity,
+            head: 0,
+            len: 0,
+        }
+    }
+
+    /// Push a new entry into the ring buffer.
+    pub fn push(&mut self, entry: TemporalEntry) {
+        if self.entries.len() < self.capacity {
+            self.entries.push(entry);
+            self.len = self.entries.len();
+        } else {
+            self.entries[self.head] = entry;
+            self.head = (self.head + 1) % self.capacity;
+        }
+    }
+
+    /// Find the most recent entry with cosine similarity > threshold to the input.
+    /// Searches from most recent to oldest.
+    pub fn find_similar(&self, input: &Tensor, threshold: f32) -> Option<&TemporalEntry> {
+        if self.len == 0 {
+            return None;
+        }
+        // Iterate from most recent to oldest
+        for i in (0..self.len).rev() {
+            let idx = if self.entries.len() < self.capacity {
+                i
+            } else {
+                (self.head + self.capacity - 1 - (self.len - 1 - i)) % self.capacity
+            };
+            let entry = &self.entries[idx];
+            let sim = input.cosine_similarity(&entry.input);
+            if sim > threshold {
+                return Some(entry);
+            }
+        }
+        None
+    }
+
+    /// Current number of entries in the buffer.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
 /// Orchestrates the full AXIOM pipeline: cache lookup, sparse graph routing,
-/// lateral traversal, hierarchical tier escalation, and feedback signals.
+/// lateral traversal, temporal blending, hierarchical tier escalation, and
+/// feedback signals.
 ///
 /// Most inputs should resolve at Surface tier without escalation.
 /// Lateral connections between Surface nodes reduce unnecessary escalation.
+/// Temporal buffer provides recency-weighted blending for similar inputs.
 /// Feedback signals from Deep flow upward to adjust Reasoning confidence.
 pub struct HierarchicalResolver {
     /// The sparse computation graph.
@@ -33,6 +116,8 @@ pub struct HierarchicalResolver {
     lateral_nodes: Vec<Box<dyn ComputeNode>>,
     /// Lateral edges between nodes at the same tier.
     lateral_edges: Vec<LateralEdge>,
+    /// Temporal buffer for recency-weighted blending (ring buffer, capacity 16).
+    pub temporal_buffer: TemporalBuffer,
     /// Accumulated feedback signals from the current resolve call.
     feedback_log: Vec<FeedbackSignal>,
 }
@@ -63,6 +148,7 @@ impl HierarchicalResolver {
             deep_nodes: Vec::new(),
             lateral_nodes: Vec::new(),
             lateral_edges: Vec::new(),
+            temporal_buffer: TemporalBuffer::new(16),
             feedback_log: Vec::new(),
         }
     }
@@ -245,6 +331,30 @@ impl HierarchicalResolver {
                     }
                 }
             }
+
+            // Phase 3.5: Temporal blend — check recency buffer for similar recent result
+            if confidence < self.config.surface_confidence_threshold {
+                if let Some(temporal_entry) = self.temporal_buffer.find_similar(input, 0.85) {
+                    // Blend: 0.3 * cached + 0.7 * current
+                    let blended = current_tensor.blend(&temporal_entry.output, 0.7);
+                    let conf_in = confidence;
+                    // Temporal blend boosts confidence toward the cached result's confidence
+                    let blended_confidence =
+                        (confidence * 0.7 + temporal_entry.confidence * 0.3).clamp(0.0, 1.0);
+                    current_tensor = blended;
+                    confidence = blended_confidence;
+                    winning_path = "temporal_blend".to_string();
+                    trace.push("temporal_blend".to_string());
+                    trace_steps.push(TraceStep {
+                        node_id: "temporal_blend".to_string(),
+                        tier: Tier::Surface,
+                        direction: TraversalDirection::Temporal,
+                        confidence_in: conf_in,
+                        confidence_out: confidence,
+                        was_cached: false,
+                    });
+                }
+            }
         }
 
         // Phase 4: Escalate to Reasoning if needed
@@ -330,10 +440,16 @@ impl HierarchicalResolver {
             }
         }
 
-        // Phase 7: Cache the result (if not from cache)
+        // Phase 7: Cache the result and push to temporal buffer (if not from cache)
         if !from_cache {
             self.cache
                 .insert_direct(cache_key, current_tensor.clone());
+            self.temporal_buffer.push(TemporalEntry {
+                input: input.clone(),
+                output: current_tensor.clone(),
+                confidence,
+                tier: tier_reached,
+            });
         }
 
         let feedback_signals = self.feedback_log.clone();
@@ -1016,9 +1132,92 @@ mod tests {
             match step.direction {
                 TraversalDirection::Forward
                 | TraversalDirection::Lateral
-                | TraversalDirection::Feedback => {}
+                | TraversalDirection::Feedback
+                | TraversalDirection::Temporal => {}
             }
             assert!(step.confidence_out >= 0.0 && step.confidence_out <= 1.0);
         }
+    }
+
+    #[test]
+    fn test_temporal_buffer_ring_behaviour() {
+        let mut buf = TemporalBuffer::new(4);
+        assert!(buf.is_empty());
+        assert_eq!(buf.len(), 0);
+
+        // Push 4 entries — fills the buffer
+        for i in 0..4 {
+            buf.push(TemporalEntry {
+                input: Tensor::from_vec(vec![i as f32, 0.0]),
+                output: Tensor::from_vec(vec![i as f32 * 10.0]),
+                confidence: 0.9,
+                tier: Tier::Surface,
+            });
+        }
+        assert_eq!(buf.len(), 4);
+
+        // Push a 5th — should overwrite the oldest (index 0)
+        buf.push(TemporalEntry {
+            input: Tensor::from_vec(vec![99.0, 0.0]),
+            output: Tensor::from_vec(vec![990.0]),
+            confidence: 0.95,
+            tier: Tier::Surface,
+        });
+        assert_eq!(buf.len(), 4); // still 4, ring wrapped
+
+        // The oldest entry (0.0, 0.0) should be gone
+        let result = buf.find_similar(&Tensor::from_vec(vec![0.0, 0.0]), 0.99);
+        // With cosine similarity, (0,0) has zero norm — no match
+        assert!(result.is_none());
+
+        // The newest entry (99.0, 0.0) should be findable
+        let result = buf.find_similar(&Tensor::from_vec(vec![99.0, 0.0]), 0.99);
+        assert!(result.is_some());
+        assert!((result.unwrap().confidence - 0.95).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_temporal_buffer_find_similar() {
+        let mut buf = TemporalBuffer::new(16);
+        buf.push(TemporalEntry {
+            input: Tensor::from_vec(vec![1.0, 0.0, 0.0, 0.0]),
+            output: Tensor::from_vec(vec![10.0, 20.0]),
+            confidence: 0.88,
+            tier: Tier::Surface,
+        });
+        buf.push(TemporalEntry {
+            input: Tensor::from_vec(vec![0.0, 1.0, 0.0, 0.0]),
+            output: Tensor::from_vec(vec![30.0, 40.0]),
+            confidence: 0.75,
+            tier: Tier::Reasoning,
+        });
+
+        // Query similar to first entry — should match
+        let query = Tensor::from_vec(vec![0.99, 0.01, 0.0, 0.0]);
+        let result = buf.find_similar(&query, 0.85);
+        assert!(result.is_some());
+        assert!((result.unwrap().confidence - 0.88).abs() < 0.01);
+
+        // Query orthogonal to both — should not match
+        let query = Tensor::from_vec(vec![0.0, 0.0, 1.0, 0.0]);
+        let result = buf.find_similar(&query, 0.85);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_temporal_blend_in_resolver() {
+        // Verify that the temporal buffer populates during resolve
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input1 = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        // Dissimilar input to avoid cache hit
+        let input2 = Tensor::from_vec(vec![-0.3, 0.9, -0.7, 0.4, -0.1, 0.8, -0.5, 0.2]);
+
+        // First resolve populates the temporal buffer
+        resolver.resolve(&input1);
+        assert!(!resolver.temporal_buffer.is_empty());
+
+        // Second resolve — dissimilar enough to miss cache, adds to temporal buffer
+        resolver.resolve(&input2);
+        assert!(resolver.temporal_buffer.len() >= 2);
     }
 }

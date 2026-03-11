@@ -167,6 +167,24 @@ impl Tensor {
         self.data.iter().map(|x| x * x).sum::<f32>().sqrt()
     }
 
+    /// Blend two tensors: result = self * alpha + other * (1 - alpha).
+    ///
+    /// If tensors have different lengths, blends up to the shorter length
+    /// and pads the rest from the longer tensor.
+    pub fn blend(&self, other: &Tensor, alpha: f32) -> Tensor {
+        let len = self.data.len().max(other.data.len());
+        let mut data = Vec::with_capacity(len);
+        for i in 0..len {
+            let a = if i < self.data.len() { self.data[i] } else { 0.0 };
+            let b = if i < other.data.len() { other.data[i] } else { 0.0 };
+            data.push(a * alpha + b * (1.0 - alpha));
+        }
+        Tensor {
+            data,
+            shape: vec![len],
+        }
+    }
+
     /// Simple hash for logging — sum of absolute values truncated.
     pub fn content_hash(&self) -> u64 {
         let sum: f64 = self.data.iter().map(|x| (*x as f64).abs()).sum();

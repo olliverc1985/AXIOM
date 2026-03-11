@@ -37,6 +37,7 @@ struct BenchLogEntry {
     forward_steps: usize,
     lateral_steps: usize,
     feedback_steps: usize,
+    temporal_steps: usize,
     winning_path: String,
 }
 
@@ -58,6 +59,7 @@ struct TextLogEntry {
     forward_steps: usize,
     lateral_steps: usize,
     feedback_steps: usize,
+    temporal_steps: usize,
     winning_path: String,
 }
 
@@ -200,18 +202,20 @@ fn test_sentences() -> Vec<(&'static str, &'static str)> {
 /// Count traversal direction steps from a resolve result.
 fn count_directions(
     trace_steps: &[axiom_core::graph::TraceStep],
-) -> (usize, usize, usize) {
+) -> (usize, usize, usize, usize) {
     let mut forward = 0;
     let mut lateral = 0;
     let mut feedback = 0;
+    let mut temporal = 0;
     for step in trace_steps {
         match step.direction {
             TraversalDirection::Forward => forward += 1,
             TraversalDirection::Lateral => lateral += 1,
             TraversalDirection::Feedback => feedback += 1,
+            TraversalDirection::Temporal => temporal += 1,
         }
     }
-    (forward, lateral, feedback)
+    (forward, lateral, feedback, temporal)
 }
 
 /// Run a bench pass and return (entries, tier_counts).
@@ -224,7 +228,7 @@ fn run_synthetic_pass(
     dashboard_mode: bool,
     state: &Arc<Mutex<DashboardState>>,
     bench_start: &Instant,
-) -> (Vec<BenchLogEntry>, HashMap<String, usize>, f32, f32, usize, usize, usize, u32, u32, usize) {
+) -> (Vec<BenchLogEntry>, HashMap<String, usize>, f32, f32, usize, usize, usize, usize, u32, u32, usize) {
     let mut tier_counts: HashMap<String, usize> = HashMap::new();
     tier_counts.insert("Surface".to_string(), 0);
     tier_counts.insert("Reasoning".to_string(), 0);
@@ -235,6 +239,7 @@ fn run_synthetic_pass(
     let mut total_forward = 0usize;
     let mut total_lateral_steps = 0usize;
     let mut total_feedback_steps = 0usize;
+    let mut total_temporal_steps = 0usize;
     let mut total_lateral_count = 0u32;
     let mut total_lateral_prevented = 0u32;
     let mut total_feedback_signals = 0usize;
@@ -252,10 +257,11 @@ fn run_synthetic_pass(
         total_lateral_prevented += result.route.lateral_prevented_escalation;
         total_feedback_signals += result.feedback_signals.len();
 
-        let (fwd, lat, fb) = count_directions(&result.route.trace_steps);
+        let (fwd, lat, fb, tmp) = count_directions(&result.route.trace_steps);
         total_forward += fwd;
         total_lateral_steps += lat;
         total_feedback_steps += fb;
+        total_temporal_steps += tmp;
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -278,6 +284,7 @@ fn run_synthetic_pass(
             forward_steps: fwd,
             lateral_steps: lat,
             feedback_steps: fb,
+            temporal_steps: tmp,
             winning_path: result.winning_path.clone(),
         });
 
@@ -295,6 +302,7 @@ fn run_synthetic_pass(
             s.forward_steps = total_forward;
             s.lateral_steps = total_lateral_steps;
             s.feedback_steps = total_feedback_steps;
+            s.temporal_steps = total_temporal_steps;
             s.lateral_prevented = total_lateral_prevented as usize;
             s.feedback_signals = total_feedback_signals;
             s.push_trace(TraceSnapshot {
@@ -337,6 +345,7 @@ fn run_synthetic_pass(
         total_forward,
         total_lateral_steps,
         total_feedback_steps,
+        total_temporal_steps,
         total_lateral_count,
         total_lateral_prevented,
         total_feedback_signals,
@@ -353,6 +362,7 @@ fn run_text_pass(
     Vec<TextLogEntry>,
     HashMap<String, usize>,
     HashMap<String, HashMap<String, usize>>,
+    usize,
     usize,
     usize,
     usize,
@@ -378,6 +388,7 @@ fn run_text_pass(
     let mut total_forward = 0usize;
     let mut total_lateral = 0usize;
     let mut total_feedback = 0usize;
+    let mut total_temporal = 0usize;
     let mut total_lateral_count = 0u32;
     let mut total_lateral_prevented = 0u32;
     let mut total_feedback_signals = 0usize;
@@ -395,10 +406,11 @@ fn run_text_pass(
             .get_mut(&tier_name)
             .unwrap() += 1;
 
-        let (fwd, lat, fb) = count_directions(&result.route.trace_steps);
+        let (fwd, lat, fb, tmp) = count_directions(&result.route.trace_steps);
         total_forward += fwd;
         total_lateral += lat;
         total_feedback += fb;
+        total_temporal += tmp;
         total_lateral_count += result.route.lateral_count;
         total_lateral_prevented += result.route.lateral_prevented_escalation;
         total_feedback_signals += result.feedback_signals.len();
@@ -419,6 +431,7 @@ fn run_text_pass(
             forward_steps: fwd,
             lateral_steps: lat,
             feedback_steps: fb,
+            temporal_steps: tmp,
             winning_path: result.winning_path.clone(),
         });
     }
@@ -432,6 +445,7 @@ fn run_text_pass(
         total_forward,
         total_lateral,
         total_feedback,
+        total_temporal,
         total_lateral_count,
         total_lateral_prevented,
         total_feedback_signals,
@@ -451,8 +465,8 @@ fn print_tier_summary(label: &str, tier_counts: &HashMap<String, usize>, total: 
     }
 }
 
-fn print_direction_summary(forward: usize, lateral: usize, feedback: usize) {
-    let total = (forward + lateral + feedback).max(1);
+fn print_direction_summary(forward: usize, lateral: usize, feedback: usize, temporal: usize) {
+    let total = (forward + lateral + feedback + temporal).max(1);
     println!("  Traversal Directions:");
     println!(
         "    Forward:  {:>5} ({:.1}%)",
@@ -468,6 +482,11 @@ fn print_direction_summary(forward: usize, lateral: usize, feedback: usize) {
         "    Feedback: {:>5} ({:.1}%)",
         feedback,
         feedback as f32 / total as f32 * 100.0
+    );
+    println!(
+        "    Temporal: {:>5} ({:.1}%)",
+        temporal,
+        temporal as f32 / total as f32 * 100.0
     );
 }
 
@@ -570,7 +589,7 @@ fn main() {
     stats_bar.set_style(ProgressStyle::with_template("{spinner:.yellow} {msg}").unwrap());
 
     let bench_start = Instant::now();
-    let (entries, tier_counts, total_cost, total_confidence, fwd, lat, fb, lat_count, lat_prev, fb_signals) =
+    let (entries, tier_counts, total_cost, total_confidence, fwd, lat, fb, tmp, lat_count, lat_prev, fb_signals) =
         run_synthetic_pass(
             &mut resolver,
             input_dim,
@@ -604,7 +623,7 @@ fn main() {
         total_cost / iterations as f32,
         total_confidence / iterations as f32,
     );
-    print_direction_summary(fwd, lat, fb);
+    print_direction_summary(fwd, lat, fb, tmp);
     println!(
         "  Lateral: {} attempted, {} prevented escalation",
         lat_count, lat_prev
@@ -634,7 +653,7 @@ fn main() {
 
     let encoder = Encoder::new(input_dim, tokeniser);
 
-    let (text_entries, text_tiers, complexity_tiers, t_fwd, t_lat, t_fb, t_lat_count, t_lat_prev, t_fb_signals) =
+    let (text_entries, text_tiers, complexity_tiers, t_fwd, t_lat, t_fb, t_tmp, t_lat_count, t_lat_prev, t_fb_signals) =
         run_text_pass(&mut resolver, &encoder, &sentences, "Pass 2");
 
     // Write text log
@@ -651,7 +670,7 @@ fn main() {
     println!();
     print_complexity_breakdown(&complexity_tiers);
     println!();
-    print_direction_summary(t_fwd, t_lat, t_fb);
+    print_direction_summary(t_fwd, t_lat, t_fb, t_tmp);
     println!(
         "  Lateral: {} attempted, {} prevented escalation",
         t_lat_count, t_lat_prev
@@ -689,7 +708,7 @@ fn main() {
     // Rebuild resolver with tuned config
     let mut resolver3 = HierarchicalResolver::build_with_axiom_config(input_dim, &tuned_config);
 
-    let (text_entries3, text_tiers3, complexity_tiers3, t3_fwd, t3_lat, t3_fb, t3_lat_count, t3_lat_prev, t3_fb_signals) =
+    let (text_entries3, text_tiers3, complexity_tiers3, t3_fwd, t3_lat, t3_fb, t3_tmp, t3_lat_count, t3_lat_prev, t3_fb_signals) =
         run_text_pass(&mut resolver3, &encoder, &sentences, "Pass 3");
 
     // Write pass 3 text log
@@ -707,7 +726,7 @@ fn main() {
     println!();
     print_complexity_breakdown(&complexity_tiers3);
     println!();
-    print_direction_summary(t3_fwd, t3_lat, t3_fb);
+    print_direction_summary(t3_fwd, t3_lat, t3_fb, t3_tmp);
     println!(
         "  Lateral: {} attempted, {} prevented escalation",
         t3_lat_count, t3_lat_prev

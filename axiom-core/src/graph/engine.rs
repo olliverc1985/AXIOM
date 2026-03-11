@@ -16,6 +16,8 @@ pub enum TraversalDirection {
     Lateral,
     /// Upward feedback from deeper tiers to shallower ones.
     Feedback,
+    /// Temporal blend from the recency buffer.
+    Temporal,
 }
 
 impl std::fmt::Display for TraversalDirection {
@@ -24,6 +26,7 @@ impl std::fmt::Display for TraversalDirection {
             TraversalDirection::Forward => write!(f, "Forward"),
             TraversalDirection::Lateral => write!(f, "Lateral"),
             TraversalDirection::Feedback => write!(f, "Feedback"),
+            TraversalDirection::Temporal => write!(f, "Temporal"),
         }
     }
 }
