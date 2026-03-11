@@ -886,19 +886,27 @@ impl HierarchicalResolver {
         if !surface_confs.is_empty() {
             let idx = ((surface_confs.len() as f32 * surface_pct) as usize)
                 .min(surface_confs.len() - 1);
-            self.config.surface_confidence_threshold = surface_confs[idx];
+            let mut threshold = surface_confs[idx];
 
             let max_surface = *surface_confs.last().unwrap();
             let min_surface = surface_confs[0];
+            let std_dev = Self::std_dev(&surface_confs);
+
+            // Enforce minimum gap: threshold must be at most max - 0.02
+            if threshold > max_surface - 0.02 {
+                threshold = max_surface - 0.02;
+            }
+            self.config.surface_confidence_threshold = threshold;
+
             eprintln!(
-                "  Calibration: surface range [{:.4}, {:.4}] → threshold {:.4} (p{:.0}, n={})",
-                min_surface, max_surface, self.config.surface_confidence_threshold,
+                "  Calibration: surface range [{:.4}, {:.4}] std={:.4} → threshold {:.4} (p{:.0}, n={})",
+                min_surface, max_surface, std_dev, self.config.surface_confidence_threshold,
                 surface_pct * 100.0, surface_confs.len()
             );
-            if self.config.surface_confidence_threshold >= max_surface {
+            if std_dev < 0.005 {
                 eprintln!(
-                    "  WARNING: surface threshold {:.4} >= max observed {:.4} — no input can reach Surface!",
-                    self.config.surface_confidence_threshold, max_surface
+                    "  WARNING: confidence distribution too narrow (std={:.4}), weights may have over-converged",
+                    std_dev
                 );
             }
         }
@@ -906,15 +914,29 @@ impl HierarchicalResolver {
         if !reasoning_confs.is_empty() {
             let idx = ((reasoning_confs.len() as f32 * reasoning_pct) as usize)
                 .min(reasoning_confs.len() - 1);
-            self.config.reasoning_confidence_threshold = reasoning_confs[idx];
+            let mut threshold = reasoning_confs[idx];
 
             let max_reasoning = *reasoning_confs.last().unwrap();
             let min_reasoning = reasoning_confs[0];
+            let std_dev = Self::std_dev(&reasoning_confs);
+
+            // Enforce minimum gap for reasoning too
+            if threshold > max_reasoning - 0.02 {
+                threshold = max_reasoning - 0.02;
+            }
+            self.config.reasoning_confidence_threshold = threshold;
+
             eprintln!(
-                "  Calibration: reasoning range [{:.4}, {:.4}] → threshold {:.4} (p{:.0}, n={})",
-                min_reasoning, max_reasoning, self.config.reasoning_confidence_threshold,
+                "  Calibration: reasoning range [{:.4}, {:.4}] std={:.4} → threshold {:.4} (p{:.0}, n={})",
+                min_reasoning, max_reasoning, std_dev, self.config.reasoning_confidence_threshold,
                 reasoning_pct * 100.0, reasoning_confs.len()
             );
+            if std_dev < 0.005 {
+                eprintln!(
+                    "  WARNING: reasoning confidence distribution too narrow (std={:.4}), weights may have over-converged",
+                    std_dev
+                );
+            }
         }
     }
 
@@ -994,6 +1016,17 @@ impl HierarchicalResolver {
                 );
             }
         }
+    }
+
+    /// Compute standard deviation of a sorted slice of f32 values.
+    fn std_dev(values: &[f32]) -> f32 {
+        if values.len() < 2 {
+            return 0.0;
+        }
+        let n = values.len() as f32;
+        let mean = values.iter().sum::<f32>() / n;
+        let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / n;
+        variance.sqrt()
     }
 
     /// Total trainable parameter count across all nodes (graph + standalone + lateral).
