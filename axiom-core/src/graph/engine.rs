@@ -209,6 +209,21 @@ impl SparseGraph {
     pub fn total_weight_count(&self) -> usize {
         self.nodes.iter().map(|n| n.weight_count()).sum()
     }
+
+    /// Apply Hebbian learning to all graph nodes.
+    ///
+    /// `input` is the original input tensor, `signal` is +1.0 (reinforce) or -1.0 (suppress).
+    pub fn hebbian_update_all(&mut self, input: &Tensor, signal: f32, learning_rate: f32) {
+        for node in &mut self.nodes {
+            let output = node.forward(input);
+            node.hebbian_update(input, &output.tensor, signal, learning_rate);
+        }
+    }
+
+    /// Sum of weight norms across all nodes (for drift tracking).
+    pub fn total_weight_norm(&self) -> f32 {
+        self.nodes.iter().map(|n| n.weight_norm()).sum()
+    }
 }
 
 #[cfg(test)]

@@ -498,6 +498,79 @@ impl HierarchicalResolver {
         &self.feedback_log
     }
 
+    /// Apply Hebbian weight learning based on a resolve outcome.
+    ///
+    /// - If resolved at Surface: reinforce Surface nodes (+1), suppress deeper nodes (-1)
+    /// - If resolved at Reasoning: suppress Surface nodes (-1), reinforce Reasoning (+1)
+    /// - If resolved at Deep: suppress Surface and Reasoning (-1), reinforce Deep (+1)
+    ///
+    /// This is local learning — no backprop, no global gradient. Each node adjusts
+    /// its weights based on its own input/output correlation and the tier signal.
+    pub fn learn(&mut self, input: &Tensor, result: &ResolveResult, learning_rate: f32) {
+        if result.from_cache {
+            return; // No learning on cache hits
+        }
+
+        match result.tier_reached {
+            Tier::Surface => {
+                // Reinforce Surface, suppress Reasoning and Deep
+                Self::hebbian_nodes(&mut self.surface_nodes, input, 1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.lateral_nodes, input, 1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.reasoning_nodes, input, -1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.deep_nodes, input, -1.0, learning_rate);
+                self.graph.hebbian_update_all(input, 1.0, learning_rate);
+            }
+            Tier::Reasoning => {
+                // Suppress Surface, reinforce Reasoning
+                Self::hebbian_nodes(&mut self.surface_nodes, input, -1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.lateral_nodes, input, -1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.reasoning_nodes, input, 1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.deep_nodes, input, -1.0, learning_rate);
+                self.graph.hebbian_update_all(input, -1.0, learning_rate);
+            }
+            Tier::Deep => {
+                // Suppress Surface and Reasoning, reinforce Deep
+                Self::hebbian_nodes(&mut self.surface_nodes, input, -1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.lateral_nodes, input, -1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.reasoning_nodes, input, -1.0, learning_rate);
+                Self::hebbian_nodes(&mut self.deep_nodes, input, 1.0, learning_rate);
+                self.graph.hebbian_update_all(input, -1.0, learning_rate);
+            }
+        }
+    }
+
+    /// Apply Hebbian update to a set of standalone nodes.
+    fn hebbian_nodes(
+        nodes: &mut [Box<dyn ComputeNode>],
+        input: &Tensor,
+        signal: f32,
+        learning_rate: f32,
+    ) {
+        for node in nodes.iter_mut() {
+            let output = node.forward(input);
+            node.hebbian_update(input, &output.tensor, signal, learning_rate);
+        }
+    }
+
+    /// Sum of weight norms across all nodes (graph + standalone + lateral).
+    /// Used for weight drift tracking.
+    pub fn total_weight_norm(&self) -> f32 {
+        let mut total = self.graph.total_weight_norm();
+        for node in &self.surface_nodes {
+            total += node.weight_norm();
+        }
+        for node in &self.reasoning_nodes {
+            total += node.weight_norm();
+        }
+        for node in &self.deep_nodes {
+            total += node.weight_norm();
+        }
+        for node in &self.lateral_nodes {
+            total += node.weight_norm();
+        }
+        total
+    }
+
     /// Build a default AXIOM resolver with a reasonable graph topology.
     ///
     /// Creates a graph with Surface, Reasoning, and Deep tier nodes
@@ -1219,5 +1292,51 @@ mod tests {
         // Second resolve — dissimilar enough to miss cache, adds to temporal buffer
         resolver.resolve(&input2);
         assert!(resolver.temporal_buffer.len() >= 2);
+    }
+
+    #[test]
+    fn test_hebbian_learning_changes_weights() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let norm_before = resolver.total_weight_norm();
+
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        let result = resolver.resolve(&input);
+
+        // Apply Hebbian learning
+        resolver.learn(&input, &result, 0.001);
+
+        let norm_after = resolver.total_weight_norm();
+        // Weight norm should have changed (learning occurred)
+        assert!(
+            (norm_after - norm_before).abs() > 1e-8,
+            "Weight norm should change after learning: before={}, after={}",
+            norm_before,
+            norm_after
+        );
+    }
+
+    #[test]
+    fn test_hebbian_learning_no_learn_on_cache_hit() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+
+        // First resolve — populates cache
+        resolver.resolve(&input);
+
+        // Second resolve — cache hit
+        let result = resolver.resolve(&input);
+        assert!(result.from_cache);
+
+        let norm_before = resolver.total_weight_norm();
+        resolver.learn(&input, &result, 0.001);
+        let norm_after = resolver.total_weight_norm();
+
+        // No learning on cache hits
+        assert!(
+            (norm_after - norm_before).abs() < 1e-10,
+            "Weight norm should NOT change on cache hit: before={}, after={}",
+            norm_before,
+            norm_after
+        );
     }
 }

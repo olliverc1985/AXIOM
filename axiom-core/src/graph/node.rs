@@ -21,7 +21,7 @@ pub struct NodeOutput {
 ///
 /// Each node performs a specific transformation on an input tensor,
 /// producing an output with a confidence score and compute cost.
-/// Nodes may have trainable weights updated via gradient descent.
+/// Nodes may have trainable weights updated via Hebbian reinforcement.
 pub trait ComputeNode: Send + Sync {
     /// Unique identifier for this node.
     fn node_id(&self) -> &str;
@@ -29,9 +29,19 @@ pub trait ComputeNode: Send + Sync {
     fn forward(&self, input: &Tensor) -> NodeOutput;
     /// Which reasoning tier this node belongs to.
     fn tier(&self) -> Tier;
-    /// Update trainable weights using gradient descent: w = w - lr * gradient.
+    /// Hebbian weight update: reinforcement (+1) or suppression (-1).
+    ///
+    /// `input` is the input tensor, `output` is the forward pass output,
+    /// `signal` is +1.0 (reinforce) or -1.0 (suppress), `learning_rate` controls step size.
     /// Default implementation is a no-op for nodes without trainable weights.
-    fn update_weights(&mut self, _gradient: &Tensor, _learning_rate: f32) {}
+    fn hebbian_update(
+        &mut self,
+        _input: &Tensor,
+        _output: &Tensor,
+        _signal: f32,
+        _learning_rate: f32,
+    ) {
+    }
     /// Total number of trainable parameters in this node.
     /// Default is 0 for nodes without trainable weights.
     fn weight_count(&self) -> usize {
@@ -41,6 +51,10 @@ pub trait ComputeNode: Send + Sync {
     /// Default returns 1.0 (always passes validation).
     fn base_confidence(&self) -> f32 {
         1.0
+    }
+    /// Snapshot of current weights for drift tracking. Returns L2 norm of weights.
+    fn weight_norm(&self) -> f32 {
+        0.0
     }
 }
 
@@ -202,16 +216,35 @@ impl ComputeNode for LinearNode {
         self.node_tier
     }
 
-    fn update_weights(&mut self, gradient: &Tensor, learning_rate: f32) {
+    fn hebbian_update(
+        &mut self,
+        input: &Tensor,
+        output: &Tensor,
+        signal: f32,
+        learning_rate: f32,
+    ) {
         let lr = if learning_rate > 0.0 {
             learning_rate
         } else {
             self.learning_rate
         };
-        // Update weights: w = w - lr * g
-        let n = self.weights.data.len().min(gradient.data.len());
-        for i in 0..n {
-            self.weights.data[i] -= lr * gradient.data[i];
+        // Hebbian rule: w_ij += signal * lr * input_i * output_j
+        // For each weight connecting input dim i to output dim j
+        let in_len = self.input_dim.min(input.data.len());
+        let out_len = self.output_dim.min(output.data.len());
+        for i in 0..in_len {
+            for j in 0..out_len {
+                let idx = i * self.output_dim + j;
+                if idx < self.weights.data.len() {
+                    self.weights.data[idx] += signal * lr * input.data[i] * output.data[j];
+                }
+            }
+        }
+        // Bias update: b_j += signal * lr * output_j
+        for j in 0..out_len {
+            if j < self.bias.data.len() {
+                self.bias.data[j] += signal * lr * output.data[j];
+            }
         }
     }
 
@@ -221,6 +254,10 @@ impl ComputeNode for LinearNode {
 
     fn base_confidence(&self) -> f32 {
         self.base_confidence
+    }
+
+    fn weight_norm(&self) -> f32 {
+        self.weights.norm()
     }
 }
 
@@ -321,15 +358,46 @@ mod tests {
     }
 
     #[test]
-    fn test_update_weights() {
+    fn test_hebbian_update() {
         let mut node = LinearNode::new("train", 2, 2, Tier::Surface, 0.9);
         let w_before: Vec<f32> = node.weights.data.clone();
-        let grad = Tensor::new(vec![0.1, 0.1, 0.1, 0.1], vec![2, 2]);
-        node.update_weights(&grad, 1.0);
-        // Each weight should have decreased by 0.1
+        let input = Tensor::from_vec(vec![1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        // Reinforcement signal (+1.0) with lr=0.1: w += 0.1 * 1.0 * 1.0 * 1.0 = 0.1
+        node.hebbian_update(&input, &output, 1.0, 0.1);
         for (before, after) in w_before.iter().zip(node.weights.data.iter()) {
-            assert!((before - 0.1 - after).abs() < 1e-6);
+            assert!(
+                (after - before - 0.1).abs() < 1e-6,
+                "Expected weight to increase by 0.1: before={}, after={}",
+                before,
+                after
+            );
         }
+    }
+
+    #[test]
+    fn test_hebbian_suppression() {
+        let mut node = LinearNode::new("suppress", 2, 2, Tier::Surface, 0.9);
+        let w_before: Vec<f32> = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        // Suppression signal (-1.0) with lr=0.1: w -= 0.1 * 1.0 * 1.0 * 1.0 = -0.1
+        node.hebbian_update(&input, &output, -1.0, 0.1);
+        for (before, after) in w_before.iter().zip(node.weights.data.iter()) {
+            assert!(
+                (after - before + 0.1).abs() < 1e-6,
+                "Expected weight to decrease by 0.1: before={}, after={}",
+                before,
+                after
+            );
+        }
+    }
+
+    #[test]
+    fn test_weight_norm() {
+        let node = LinearNode::new("norm_test", 4, 4, Tier::Surface, 0.9);
+        let norm = node.weight_norm();
+        assert!(norm > 0.0, "Weight norm should be positive: {}", norm);
     }
 
     #[test]
