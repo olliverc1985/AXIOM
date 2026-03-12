@@ -5,5 +5,5 @@ pub mod resolver;
 pub mod tier;
 
 pub use feedback::{FeedbackReason, FeedbackSignal};
-pub use resolver::{ErrorEvent, HierarchicalResolver, RouteMode, TemporalBuffer, TemporalEntry};
+pub use resolver::{Coalition, CoalitionMember, ErrorEvent, HierarchicalResolver, RouteMode, TemporalBuffer, TemporalEntry};
 pub use tier::{AxiomConfig, Tier, TierConfig};

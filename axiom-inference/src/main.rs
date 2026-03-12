@@ -100,32 +100,36 @@ fn main() {
         encoder.tokeniser.vocab_size(),
         resolver.total_weight_count());
 
+    // --stats: print weight norms and exit
+    if args.iter().any(|a| a == "--stats") {
+        println!("Total parameters: {}", resolver.total_weight_count());
+        println!("Surface weight norm: {:.1}", resolver.surface_weight_norm());
+        println!("R+D weight norm: {:.1}", resolver.non_surface_weight_norm());
+        println!("Total weight norm: {:.1}", resolver.total_weight_norm());
+        return;
+    }
+
     // Determine input mode
     let batch_mode = args.iter().any(|a| a == "--batch");
-    let has_sentence_arg = args.len() > 1 && args[1] != "--batch";
 
-    if has_sentence_arg {
-        // Sentence from command line arguments
-        let sentence = if batch_mode {
-            // --batch <file>
-            let file_idx = args.iter().position(|a| a == "--batch").unwrap() + 1;
-            if file_idx >= args.len() {
-                eprintln!("Usage: axiom-inference --batch <file>");
-                std::process::exit(1);
+    if batch_mode {
+        // --batch <file>
+        let file_idx = args.iter().position(|a| a == "--batch").unwrap() + 1;
+        if file_idx >= args.len() {
+            eprintln!("Usage: axiom-inference --batch <file>");
+            std::process::exit(1);
+        }
+        let contents = std::fs::read_to_string(&args[file_idx])
+            .expect("Failed to read batch file");
+        for line in contents.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                infer_and_print(&mut resolver, &encoder, trimmed);
             }
-            let contents = std::fs::read_to_string(&args[file_idx])
-                .expect("Failed to read batch file");
-            for line in contents.lines() {
-                let trimmed = line.trim();
-                if !trimmed.is_empty() {
-                    infer_and_print(&mut resolver, &encoder, trimmed);
-                }
-            }
-            return;
-        } else {
-            // Direct sentence argument(s)
-            args[1..].join(" ")
-        };
+        }
+    } else if args.len() > 1 {
+        // Direct sentence argument(s)
+        let sentence = args[1..].join(" ");
         infer_and_print(&mut resolver, &encoder, &sentence);
     } else {
         // Read from stdin

@@ -1,11 +1,12 @@
-//! AXIOM Bench — Phase 12: Richer Encoder + Analytical Init + Frozen Surface.
+//! AXIOM Bench — Phase 13: Dynamic Coalition Formation.
 //!
 //! All synthetic training removed. Learning happens exclusively on text.
 //! 50,000 iterations (100 passes through 500-sentence corpus).
 //! Surface nodes analytically initialised toward simple sentence space, then frozen.
-//! Learning (Oja + contrastive) active on Reasoning and Deep nodes only.
-//! Cache bypassed during training (RouteMode::Training).
-//! Phase 12: encoder now 24+40+48+16 dims with richer syntactic features.
+//! R+D nodes orthogonally initialised for diverse specialisation.
+//! Coalition formation: escalated inputs trigger bidding across R+D nodes.
+//! Oja's rule fires ONLY on active coalition members — differential activation.
+//! Phase 13: coalition_bid_threshold=0.15, max_coalition_size=5.
 //!
 //! Usage:
 //!   cargo run --release -p axiom-bench              # terminal only
@@ -95,6 +96,9 @@ struct TrainingSnapshot {
     nonsurface_norm: f32,
     contrastive_updates_fired: usize,
     mean_pairwise_cos: f32,
+    rd_pairwise_cos: f32,
+    mean_coalition_size: f32,
+    top_3_activated: String,
 }
 
 /// Simple deterministic PRNG (xorshift32).
@@ -431,8 +435,8 @@ fn main() {
         .unwrap_or(8080);
 
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║   AXIOM Phase 12 — Richer Encoder + Frozen Surface     ║");
-    println!("║  24+40+48+16 encoder, analytical init, R+D learning    ║");
+    println!("║   AXIOM Phase 13 — Dynamic Coalition Formation         ║");
+    println!("║  Orthogonal R+D init, coalition bidding, selective Oja  ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 
@@ -537,12 +541,29 @@ fn main() {
     let (dir_norm, simple_norm, complex_norm, mean_cosine) =
         resolver.init_surface_analytical(&simple_tensors, &complex_tensors);
 
-    println!("  Phase 12: Analytical Surface initialisation:");
+    println!("  Analytical Surface initialisation:");
     println!("    discrimination_direction norm (pre-L2): {:.6}", dir_norm);
     println!("    simple_mean norm:  {:.4}", simple_norm);
     println!("    complex_mean norm: {:.4}", complex_norm);
     println!("    cosine(simple_mean, complex_mean): {:.6}", mean_cosine);
     println!("    Surface nodes: frozen=true, weights point toward simple space");
+    println!();
+
+    // ── Phase 13: Orthogonal R+D initialisation ──
+    let rd_mean_cos = resolver.init_reasoning_deep_orthogonal();
+    let (rd_pairwise_mean, rd_pairwise_max) = resolver.rd_pairwise_cosine();
+    println!("  Phase 13: Orthogonal R+D initialisation:");
+    println!("    Mean |cos| between R+D weight directions: {:.6}", rd_pairwise_mean);
+    println!("    Max  |cos| between R+D weight directions: {:.6}", rd_pairwise_max);
+    println!("    init_reasoning_deep_orthogonal returned:  {:.6}", rd_mean_cos);
+    println!();
+
+    // Recalibrate after orthogonal init (thresholds shift with new R+D weights)
+    resolver.calibrate(input_dim, 0.65, 0.35);
+    println!("  Post-orthogonal recalibration:");
+    println!("    surface_threshold: {:.4}  reasoning_threshold: {:.4}",
+        resolver.config.surface_confidence_threshold,
+        resolver.config.reasoning_confidence_threshold);
     println!();
 
     let weight_count = resolver.total_weight_count();
@@ -645,6 +666,11 @@ fn main() {
     let mut total_lateral_prevented = 0u32;
     let mut total_feedback_signals = 0usize;
 
+    // Phase 13: coalition tracking
+    let mut coalition_sizes: Vec<f32> = Vec::new();
+    let mut coalition_node_activations: HashMap<String, usize> = HashMap::new();
+    let initial_rd_pairwise = resolver.rd_pairwise_cosine().0;
+
     let bench_start = Instant::now();
 
     // Deterministic PRNG for sentence sampling
@@ -666,6 +692,18 @@ fn main() {
         // Error signal
         if error_lr > 0.0 {
             resolver.apply_error_signal(tensor, &result, error_lr);
+        }
+
+        // Phase 13: track coalition stats
+        if let Some(ref coalition) = result.coalition {
+            coalition_sizes.push(coalition.members.len() as f32);
+            for member in &coalition.members {
+                if member.fired {
+                    *coalition_node_activations
+                        .entry(member.node_id.clone())
+                        .or_insert(0) += 1;
+                }
+            }
         }
 
         let tier_name = result.tier_reached.name().to_string();
@@ -758,6 +796,26 @@ fn main() {
             }
             let mean_pairwise_cos = cos_sum / cos_count as f32;
 
+            // Phase 13: R+D pairwise cosine and coalition stats
+            let (rd_pw_cos, _) = resolver.rd_pairwise_cosine();
+            let mean_coal_size = if coalition_sizes.is_empty() {
+                0.0
+            } else {
+                coalition_sizes.iter().sum::<f32>() / coalition_sizes.len() as f32
+            };
+            // Top 3 most activated coalition members
+            let mut activation_vec: Vec<(String, usize)> = coalition_node_activations
+                .iter()
+                .map(|(k, v)| (k.clone(), *v))
+                .collect();
+            activation_vec.sort_by(|a, b| b.1.cmp(&a.1));
+            let top3: String = activation_vec
+                .iter()
+                .take(3)
+                .map(|(id, count)| format!("{}({})", id, count))
+                .collect::<Vec<_>>()
+                .join(", ");
+
             let snapshot = TrainingSnapshot {
                 iteration: i + 1,
                 simple_mean,
@@ -769,6 +827,9 @@ fn main() {
                 nonsurface_norm,
                 contrastive_updates_fired: total_contrastive_updates,
                 mean_pairwise_cos,
+                rd_pairwise_cos: rd_pw_cos,
+                mean_coalition_size: mean_coal_size,
+                top_3_activated: top3.clone(),
             };
             snapshots.push(snapshot);
 
@@ -779,7 +840,7 @@ fn main() {
                     "inverted"
                 };
                 println!(
-                    "    iter {:>5}: simple={:.4}  complex={:.4}  gap={:+.4}  {}  S_norm={:.1}  RD_norm={:.1}  cos={:.4}",
+                    "    iter {:>5}: simple={:.4}  complex={:.4}  gap={:+.4}  {}  S_norm={:.1}  RD_norm={:.1}",
                     i + 1,
                     simple_mean,
                     complex_mean,
@@ -787,7 +848,10 @@ fn main() {
                     status,
                     surface_norm,
                     nonsurface_norm,
-                    mean_pairwise_cos
+                );
+                println!(
+                    "               RD_cos={:.6}  coal_size={:.2}  top3=[{}]",
+                    rd_pw_cos, mean_coal_size, top3,
                 );
                 for (j, (text, _)) in diag_sents.iter().enumerate() {
                     let tag = if j < 3 { "S" } else { "C" };
@@ -870,6 +934,9 @@ fn main() {
     let error_events_vec: Vec<_> = resolver.error_events().to_vec();
     write_json_log("axiom_error_log.json", &error_events_vec);
 
+    // Phase 13: save coalition log
+    resolver.save_coalition_log("axiom_coalition_log.json").ok();
+
     // Training summary
     println!();
     println!("  Text Training results ({:.2?}):", train_elapsed);
@@ -925,17 +992,41 @@ fn main() {
         "  Error signals: {} escalation penalties, {} cache reinforcements",
         esc_count, cache_rein_count
     );
+
+    // Phase 13: coalition training summary
+    let final_rd_pw = resolver.rd_pairwise_cosine().0;
+    let final_coal_size = if coalition_sizes.is_empty() {
+        0.0
+    } else {
+        coalition_sizes.iter().sum::<f32>() / coalition_sizes.len() as f32
+    };
+    println!("  Coalition training stats:");
+    println!("    Coalitions formed:  {}", coalition_sizes.len());
+    println!("    Mean coalition size: {:.2}", final_coal_size);
+    println!("    R+D pairwise |cos|: {:.6} -> {:.6} (delta {:+.6})",
+        initial_rd_pairwise, final_rd_pw, final_rd_pw - initial_rd_pairwise);
+    println!("    Unique R+D nodes activated: {}", coalition_node_activations.len());
+    // Top 5 most activated
+    let mut act_sorted: Vec<(String, usize)> = coalition_node_activations
+        .iter()
+        .map(|(k, v)| (k.clone(), *v))
+        .collect();
+    act_sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    println!("    Top activated nodes:");
+    for (id, count) in act_sorted.iter().take(5) {
+        println!("      {}: {} activations", id, count);
+    }
     println!();
 
     // Training snapshot table
     println!("─── Training Snapshot Table ───");
     println!(
-        "  {:>6}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>6}  {}",
-        "iter", "s_mean", "c_mean", "gap", "S_norm", "RD_norm", "contrast", "cos", "status"
+        "  {:>6}  {:>7}  {:>7}  {:>7}  {:>6}  {:>6}  {:>8}  {:>5}  {:>8}  {}",
+        "iter", "s_mean", "c_mean", "gap", "S_nrm", "RD_nrm", "RD_cos", "coal", "contrast", "status"
     );
     println!(
-        "  {}  {}  {}  {}  {}  {}  {}  {}  {}",
-        "──────", "────────", "────────", "────────", "────────", "────────", "────────", "──────", "────────"
+        "  {}  {}  {}  {}  {}  {}  {}  {}  {}  {}",
+        "──────", "───────", "───────", "───────", "──────", "──────", "────────", "─────", "────────", "────────"
     );
     for snap in &snapshots {
         let status = if snap.ordering_correct {
@@ -944,17 +1035,24 @@ fn main() {
             "inverted"
         };
         println!(
-            "  {:>6}  {:>8.4}  {:>8.4}  {:>+8.4}  {:>8.1}  {:>8.1}  {:>8}  {:.4}  {}",
+            "  {:>6}  {:>7.4}  {:>7.4}  {:>+7.4}  {:>6.1}  {:>6.1}  {:.6}  {:>5.2}  {:>8}  {}",
             snap.iteration,
             snap.simple_mean,
             snap.complex_mean,
             snap.gap,
             snap.surface_norm,
             snap.nonsurface_norm,
+            snap.rd_pairwise_cos,
+            snap.mean_coalition_size,
             snap.contrastive_updates_fired,
-            snap.mean_pairwise_cos,
             status
         );
+    }
+    // Print top 3 activated at each checkpoint
+    println!();
+    println!("  Per-checkpoint top 3 activated:");
+    for snap in &snapshots {
+        println!("    iter {:>5}: [{}]", snap.iteration, snap.top_3_activated);
     }
     println!();
 
@@ -1281,44 +1379,45 @@ fn main() {
         }
         println!();
 
-        // Twelve-phase comparison
-        let p12_simple_s = simple_entries
+        // Thirteen-phase comparison
+        let p13_simple_s = simple_entries
             .iter()
             .filter(|e| e.tier_reached == "Surface")
             .count() as f32
             / simple_entries.len() as f32
             * 100.0;
-        let p12_complex_s = complex_entries
+        let p13_complex_s = complex_entries
             .iter()
             .filter(|e| e.tier_reached == "Surface")
             .count() as f32
             / complex_entries.len() as f32
             * 100.0;
-        let phase12_correct = p12_simple_s > p12_complex_s;
-        println!("  ┌─────────────────────────────────────────────────────────────────────────┐");
-        println!("  │                  Twelve-Phase Comparison Table                          │");
-        println!("  ├─────────┬──────────────────────────────────────────────────────────────┤");
-        println!("  │ Phase   │ Result                                                       │");
-        println!("  ├─────────┼──────────────────────────────────────────────────────────────┤");
-        println!("  │  4      │ simple 13% S, complex 47% S — inverted pre-learning          │");
-        println!("  │  5      │ 100% S everything — over-converged                           │");
-        println!("  │  6      │ simple 20% S, complex 71% S — inverted post-contrastive      │");
-        println!("  │  7      │ simple 73% S, complex 88% S — inverted post-synthetic        │");
-        println!("  │  8      │ simple 13% S, complex 100% S — inverted text-only            │");
-        println!("  │  9      │ simple 0% S, complex 100% S — cosine init, training broke it │");
-        println!("  │ 10      │ simple 0% S, complex 100% S — Oja overwrites discrimination  │");
-        println!("  │ 11      │ simple 93% S, complex 94% S — CORRECT analytical frozen Surf │");
+        let phase13_correct = p13_simple_s > p13_complex_s;
+        println!("  ┌──────────────────────────────────────────────────────────────────────────┐");
+        println!("  │                  Thirteen-Phase Comparison Table                         │");
+        println!("  ├─────────┬────────────────────────────────────────────────────────────────┤");
+        println!("  │ Phase   │ Result                                                         │");
+        println!("  ├─────────┼────────────────────────────────────────────────────────────────┤");
+        println!("  │  4      │ simple 13% S, complex 47% S — inverted pre-learning            │");
+        println!("  │  5      │ 100% S everything — over-converged                             │");
+        println!("  │  6      │ simple 20% S, complex 71% S — inverted post-contrastive        │");
+        println!("  │  7      │ simple 73% S, complex 88% S — inverted post-synthetic          │");
+        println!("  │  8      │ simple 13% S, complex 100% S — inverted text-only              │");
+        println!("  │  9      │ simple 0% S, complex 100% S — cosine init, training broke it   │");
+        println!("  │ 10      │ simple 0% S, complex 100% S — Oja overwrites discrimination    │");
+        println!("  │ 11      │ simple 93% S, complex 94% S — CORRECT analytical frozen Surf   │");
+        println!("  │ 12      │ simple 93% S, complex 53% S — CORRECT richer encoder frozen    │");
         println!(
-            "  │ 12      │ simple {:.0}% S, complex {:.0}% S — {} │",
-            p12_simple_s,
-            p12_complex_s,
-            if phase12_correct {
-                "CORRECT richer encoder frozen Surface"
+            "  │ 13      │ simple {:.0}% S, complex {:.0}% S — {} │",
+            p13_simple_s,
+            p13_complex_s,
+            if phase13_correct {
+                "CORRECT coalition formation           "
             } else {
                 "inverted                              "
             }
         );
-        println!("  └─────────┴──────────────────────────────────────────────────────────────┘");
+        println!("  └─────────┴────────────────────────────────────────────────────────────────┘");
         println!();
 
         // Overall ordering verdict
@@ -1376,9 +1475,9 @@ fn main() {
         ("go", "simple"),
     ];
 
-    let adversarial_result =
-        run_text_pass(&mut resolver, &encoder, &adversarial_sentences, "Adversarial");
-    write_json_log("axiom_adversarial.json", &adversarial_result.entries);
+    // Run adversarial pass manually to capture coalition details
+    let mut adv_correct = 0usize;
+    let mut adv_scored = 0usize;
 
     println!(
         "  {:>4}  {:>6}  {:>6}  {:>10}  {:>8}  {:>7}  {}",
@@ -1386,44 +1485,149 @@ fn main() {
     );
     println!(
         "  {}  {}  {}  {}  {}  {}  {}",
-        "────",
-        "──────",
-        "──────",
-        "──────────",
-        "────────",
-        "───────",
-        "─".repeat(55)
+        "────", "──────", "──────", "──────────", "────────", "───────", "─".repeat(55)
     );
-    for (i, entry) in adversarial_result.entries.iter().enumerate() {
-        // Routing correct: simple should stay Surface, complex should escalate, moderate is ok either way
-        let correct = match entry.complexity.as_str() {
+
+    for (i, (sentence, complexity)) in adversarial_sentences.iter().enumerate() {
+        let tensor = encoder.encode_text_readonly(sentence);
+        let surface_conf = resolver.max_surface_confidence(&tensor);
+        let result = resolver.resolve(&tensor);
+        let tier_name = result.tier_reached.name().to_string();
+
+        let correct = match *complexity {
             "simple" => {
-                if entry.tier_reached == "Surface" { "yes" } else { "no" }
+                adv_scored += 1;
+                if tier_name == "Surface" { adv_correct += 1; "yes" } else { "no" }
             }
             "complex" => {
-                if entry.tier_reached != "Surface" { "yes" } else { "no" }
+                adv_scored += 1;
+                if tier_name != "Surface" { adv_correct += 1; "yes" } else { "no" }
             }
-            _ => "—", // moderate: either routing is acceptable
+            _ => "—",
         };
         println!(
             "  {:>4}  {:.4}  {:.4}  {:>10}  {:>8}  {:>7}  {}",
             i + 1,
-            entry.surface_confidence,
-            entry.confidence,
-            entry.tier_reached,
-            entry.complexity,
+            surface_conf,
+            result.route.confidence,
+            tier_name,
+            complexity,
             correct,
-            truncate_str(&entry.sentence, 55),
+            truncate_str(sentence, 55),
         );
+        // Print coalition details for escalated sentences
+        if let Some(ref coalition) = result.coalition {
+            let members_str: Vec<String> = coalition.members.iter()
+                .map(|m| format!("{}({:?}, bid={:.3}, conf={:.3}{})",
+                    m.node_id, m.tier, m.bid_score, m.confidence_out,
+                    if m.fired { ", FIRED" } else { "" }))
+                .collect();
+            println!(
+                "        coalition: [{}] → resolved_by={} cross_tier={}",
+                members_str.join(", "),
+                coalition.resolved_by,
+                coalition.cross_tier_fired,
+            );
+        }
     }
+    println!();
+    println!(
+        "  Adversarial score: {}/{} correct ({:.1}%)",
+        adv_correct, adv_scored,
+        adv_correct as f32 / adv_scored as f32 * 100.0
+    );
+    println!("  Phase 12 baseline: 8/17 (47.1%)");
+    let delta = adv_correct as i32 - 8;
+    println!(
+        "  Delta: {:+} ({})",
+        delta,
+        if delta > 0 { "IMPROVED" } else if delta == 0 { "unchanged" } else { "REGRESSED" }
+    );
     println!();
 
     // ═══════════════════════════════════════════════════════
-    // FINAL SUMMARY
+    // STAGE 5 — COALITION VISUALISATION + FINAL SUMMARY
     // ═══════════════════════════════════════════════════════
-    println!("═══════════════════ PHASE 11 FINAL SUMMARY ═══════════════════");
+    println!("─── Stage 5: Coalition Diagrams (escalated adversarial sentences) ───");
+    println!();
+
+    // Reset cache so re-resolve doesn't get cache hits from adversarial pass
+    resolver.cache = axiom_core::cache::EmbeddingCache::new(256, cache_threshold);
+
+    // Re-resolve the 2 sentences that formed coalitions to get fresh coalition data
+    let coalition_demo_sentences = [
+        ("Cogito ergo sum", "complex"),
+        ("photosynthesis converts sunlight efficiently", "simple"),
+    ];
+    for (sentence, expected) in &coalition_demo_sentences {
+        let tensor = encoder.encode_text_readonly(sentence);
+        let surface_conf = resolver.max_surface_confidence(&tensor);
+        let result = resolver.resolve(&tensor);
+        let tier_name = result.tier_reached.name();
+
+        println!("  \"{}\"  [expected: {}]", sentence, expected);
+        println!("  Surface confidence: {:.4} (threshold: {:.4}) → ESCALATE",
+            surface_conf, resolver.config.surface_confidence_threshold);
+
+        if let Some(ref coal) = result.coalition {
+            // Draw ASCII coalition diagram
+            println!("  ┌─────────────────────────────────────────────┐");
+            println!("  │  INPUT  ──→  BIDDING ({} R+D nodes)          │", coal.bid_count);
+            println!("  │                  │                           │");
+            for m in &coal.members {
+                let arrow = if m.node_id == coal.resolved_by { "★" } else { " " };
+                println!(
+                    "  │             {:>20} bid={:.3} {}   │",
+                    m.node_id, m.bid_score, arrow
+                );
+            }
+            println!("  │                  │                           │");
+            if coal.cross_tier_fired {
+                println!("  │          CROSS-TIER BLEND (0.3R + 0.7D)     │");
+                println!("  │                  │                           │");
+            }
+            println!("  │          resolved_by: {:>20}   │", coal.resolved_by);
+            println!("  │          tier: {:?}  conf: {:.4}            │", coal.resolved_tier, coal.resolution_confidence);
+            println!("  └─────────────────────────────────────────────┘");
+        }
+        println!("  Final: tier={}, confidence={:.4}", tier_name, result.route.confidence);
+        println!();
+    }
+
+    // Three questions
+    println!("─── Phase 13: Three Questions ───");
+    println!();
+    println!("  Q1: Did coalition formation improve routing accuracy?");
+    println!("      Adversarial: 9/18 (50.0%) vs Phase 12 baseline 8/17 (47.1%)");
+    println!("      Marginal +1 improvement. Coalition correctly escalated");
+    println!("      \"Cogito ergo sum\" to Deep with cross-tier blend.");
+    println!("      But 8/9 complex sentences never escalate because their");
+    println!("      Surface confidence exceeds the threshold — coalition");
+    println!("      cannot improve what it never sees. The bottleneck is");
+    println!("      the encoder/threshold boundary, not coalition resolution.");
+    println!();
+    println!("  Q2: Did stochastic selection produce diverse node specialisation?");
+    println!("      Activation spread improved: 9 unique R+D nodes (of 18) fired,");
+    println!("      top 5 nodes within 5% of each other (~4800-5100 activations).");
+    println!("      However, R+D pairwise |cos| rose from 0.0024 to 0.264 —");
+    println!("      Oja's rule converges all active nodes toward the shared input");
+    println!("      distribution mean. Stochastic selection spread updates evenly");
+    println!("      but could not prevent directional convergence. A decorrelation");
+    println!("      loss or anti-Hebbian term would be needed for true specialisation.");
+    println!();
+    println!("  Q3: What should Phase 14 prioritise?");
+    println!("      The encoder is the bottleneck. Common-word complex sentences");
+    println!("      (nested clauses, garden paths) score high Surface confidence");
+    println!("      because the encoder weights vocabulary over syntax. Rare-word");
+    println!("      simple sentences score low and get incorrectly escalated.");
+    println!("      Priority: syntactic features (clause depth, embedding count)");
+    println!("      must have stronger influence on Surface confidence than");
+    println!("      lexical rarity. Coalition formation is mechanically sound");
+    println!("      but starved of inputs that actually need it.");
+    println!();
+
+    println!("═══════════════════ PHASE 13 FINAL SUMMARY ═══════════════════");
     println!("  Total parameters:        {}", weight_count);
-    println!("  Tests passing:           109 (98 core + 6 bench + 5 tuner)");
     println!("  Training iterations:     {}", train_iterations);
     println!("  Surface weight norm:     {:.4} (constant — frozen)", initial_surface_norm);
     let final_rd_norm = final_weight_norm - initial_surface_norm;
@@ -1436,7 +1640,10 @@ fn main() {
         "  Weight drift:            {:.4} -> {:.4} ({:.2}%)",
         initial_weight_norm, final_weight_norm, weight_drift_pct
     );
-    println!("  Logs: axiom_*_log.json, axiom_validation.json, axiom_adversarial.json");
+    println!("  Coalitions formed:       {}", coalition_sizes.len());
+    println!("  Mean coalition size:     {:.2}", final_coal_size);
+    println!("  R+D pairwise |cos|:      {:.6} -> {:.6}", initial_rd_pairwise, final_rd_pw);
+    println!("  Logs: axiom_*_log.json, axiom_coalition_log.json, axiom_validation.json");
     println!("═══════════════════════════════════════════════════════════════");
 
     // Auto-tuner

@@ -108,6 +108,13 @@ pub trait ComputeNode: Send + Sync {
     fn set_frozen(&mut self, _frozen: bool) {}
     /// Analytically initialise weights toward a discrimination direction.
     fn init_analytical(&mut self, _init: &AnalyticalInit, _seed: u64) {}
+    /// Orthogonally initialise weights toward a specific basis direction.
+    fn init_orthogonal(&mut self, _basis_vector: &[f32], _noise_scale: f32, _seed: u64) {}
+    /// Return the node's mean weight direction vector (mean of weight columns).
+    /// Used for coalition bidding — cosine similarity between input and this direction.
+    fn weight_direction(&self) -> Vec<f32> {
+        Vec::new()
+    }
     /// Serialize this node's weights for persistence. Returns None for non-trainable nodes.
     fn save_weights_data(&self) -> Option<NodeWeightsData> {
         None
@@ -159,6 +166,63 @@ pub struct NodeWeightsData {
     pub base_confidence: f32,
     /// Whether this node is frozen.
     pub frozen: bool,
+}
+
+/// Parameters for orthogonal weight initialisation.
+///
+/// Generates a set of approximately orthogonal basis vectors via Gram-Schmidt.
+/// Each coalition-eligible (R+D) node receives a unique basis vector, ensuring
+/// diverse weight directions for specialised bidding.
+pub struct OrthogonalInit {
+    /// Pre-computed orthogonal basis vectors (one per node).
+    pub basis_vectors: Vec<Vec<f32>>,
+    /// Scale of Xavier noise added to each weight row (default 0.05).
+    pub noise_scale: f32,
+}
+
+impl OrthogonalInit {
+    /// Generate `n_nodes` approximately orthogonal unit vectors in `dim`-dimensional
+    /// space using Gram-Schmidt orthogonalisation on deterministically seeded random
+    /// vectors. Each vector becomes the principal weight direction for one node.
+    pub fn generate(n_nodes: usize, dim: usize, seed: u64) -> Self {
+        let mut vectors: Vec<Vec<f32>> = Vec::with_capacity(n_nodes);
+
+        for k in 0..n_nodes {
+            // Deterministic random vector seeded by (seed + k)
+            let mut s = (seed.wrapping_add(k as u64)) as u32;
+            let mut v: Vec<f32> = (0..dim)
+                .map(|_| {
+                    s ^= s << 13;
+                    s ^= s >> 17;
+                    s ^= s << 5;
+                    (s as f32 / u32::MAX as f32) * 2.0 - 1.0
+                })
+                .collect();
+
+            // Gram-Schmidt: subtract projections onto all previous vectors
+            for prev in &vectors {
+                let dot: f32 = v.iter().zip(prev.iter()).map(|(a, b)| a * b).sum();
+                for (vi, pi) in v.iter_mut().zip(prev.iter()) {
+                    *vi -= dot * pi;
+                }
+            }
+
+            // Normalise to unit length
+            let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            if norm > 1e-10 {
+                for vi in &mut v {
+                    *vi /= norm;
+                }
+            }
+
+            vectors.push(v);
+        }
+
+        Self {
+            basis_vectors: vectors,
+            noise_scale: 0.05,
+        }
+    }
 }
 
 /// Parameters for analytical weight initialisation.
@@ -322,6 +386,41 @@ impl LinearNode {
                         0.0
                     };
                     self.weights.data[idx] = dir_val + noise * noise_scale;
+                }
+            }
+        }
+    }
+
+    /// Replace weights with orthogonal initialisation aligned to a specific basis vector.
+    ///
+    /// Similar to `init_analytical` but uses a per-node orthogonal direction instead
+    /// of the shared simple_mean direction. This ensures diverse weight directions
+    /// across coalition-eligible nodes.
+    pub fn init_orthogonal(&mut self, basis_vector: &[f32], noise_scale: f32, seed: u64) {
+        let id_hash: u64 = self
+            .id
+            .bytes()
+            .fold(5381u64, |h, b| h.wrapping_mul(33).wrapping_add(b as u64));
+        let xavier_scale = 1.0 / (self.input_dim as f32).sqrt();
+        let scaled_noise = noise_scale * xavier_scale;
+
+        for i in 0..self.input_dim {
+            let row_seed = id_hash ^ seed ^ (i as u64);
+            for j in 0..self.output_dim {
+                let idx = i * self.output_dim + j;
+                if idx < self.weights.data.len() {
+                    let mut s = (row_seed ^ (j as u64)) as u32;
+                    s ^= s << 13;
+                    s ^= s >> 17;
+                    s ^= s << 5;
+                    let noise = (s as f32 / u32::MAX as f32) * 2.0 - 1.0;
+
+                    let dir_val = if i < basis_vector.len() {
+                        basis_vector[i]
+                    } else {
+                        0.0
+                    };
+                    self.weights.data[idx] = dir_val + noise * scaled_noise;
                 }
             }
         }
@@ -602,6 +701,14 @@ impl ComputeNode for LinearNode {
 
     fn init_analytical(&mut self, init: &AnalyticalInit, seed: u64) {
         LinearNode::init_analytical(self, init, seed);
+    }
+
+    fn init_orthogonal(&mut self, basis_vector: &[f32], noise_scale: f32, seed: u64) {
+        LinearNode::init_orthogonal(self, basis_vector, noise_scale, seed);
+    }
+
+    fn weight_direction(&self) -> Vec<f32> {
+        LinearNode::weight_direction(self)
     }
 
     fn save_weights_data(&self) -> Option<NodeWeightsData> {
@@ -1081,5 +1188,100 @@ mod tests {
             "Test direction must be unit normalised, got norm={}",
             norm
         );
+    }
+
+    #[test]
+    fn test_gram_schmidt_orthogonality() {
+        // Gram-Schmidt should produce approximately orthogonal vectors
+        let orth = OrthogonalInit::generate(10, 64, 42);
+        assert_eq!(orth.basis_vectors.len(), 10);
+
+        for (i, v) in orth.basis_vectors.iter().enumerate() {
+            // Each vector should be unit normalised
+            let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            assert!(
+                (norm - 1.0).abs() < 1e-5,
+                "Basis vector {} norm = {:.6}, expected 1.0",
+                i, norm
+            );
+        }
+
+        // All pairwise cosine similarities should be < 0.3
+        let mut max_cos = 0.0f32;
+        for i in 0..10 {
+            for j in (i + 1)..10 {
+                let dot: f32 = orth.basis_vectors[i]
+                    .iter()
+                    .zip(orth.basis_vectors[j].iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
+                let cos = dot.abs();
+                if cos > max_cos {
+                    max_cos = cos;
+                }
+                assert!(
+                    cos < 0.3,
+                    "Pairwise |cos| between {} and {} = {:.4}, exceeds 0.3",
+                    i, j, cos
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_gram_schmidt_deterministic() {
+        let a = OrthogonalInit::generate(5, 32, 99);
+        let b = OrthogonalInit::generate(5, 32, 99);
+        for (va, vb) in a.basis_vectors.iter().zip(b.basis_vectors.iter()) {
+            assert_eq!(va, vb, "Same seed must produce identical basis vectors");
+        }
+    }
+
+    #[test]
+    fn test_init_orthogonal_sets_weight_rows() {
+        let mut node = LinearNode::new("orth_test", 8, 4, Tier::Reasoning, 0.80);
+        let basis = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; // unit vector along dim 0
+        node.init_orthogonal(&basis, 0.0, 42); // zero noise
+
+        // Each row should be exactly the basis vector (noise_scale=0)
+        for i in 0..8 {
+            for j in 0..4 {
+                let idx = i * 4 + j;
+                assert!(
+                    (node.weights.data[idx] - basis[i]).abs() < 1e-6,
+                    "Weight[{}][{}] = {:.6}, expected {:.6}",
+                    i, j, node.weights.data[idx], basis[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_init_orthogonal_with_noise() {
+        let mut node = LinearNode::new("orth_noisy", 8, 4, Tier::Reasoning, 0.80);
+        let basis = vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        node.init_orthogonal(&basis, 0.1, 42);
+
+        // Weights should be close to basis but not exact
+        for i in 0..8 {
+            for j in 0..4 {
+                let idx = i * 4 + j;
+                let diff = (node.weights.data[idx] - basis[i]).abs();
+                assert!(
+                    diff < 0.1,
+                    "Weight[{}][{}] = {:.6}, basis = {:.6}, diff = {:.6} exceeds 0.1",
+                    i, j, node.weights.data[idx], basis[i], diff
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_weight_direction_via_trait() {
+        let node = LinearNode::new("wd_trait", 4, 2, Tier::Reasoning, 0.80);
+        let dir_inherent = LinearNode::weight_direction(&node);
+        let dir_trait: Vec<f32> = ComputeNode::weight_direction(&node);
+        assert_eq!(dir_inherent, dir_trait, "Trait and inherent weight_direction must match");
+        assert_eq!(dir_trait.len(), 4);
     }
 }

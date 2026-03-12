@@ -143,6 +143,14 @@ pub struct HierarchicalResolver {
     feedback_log: Vec<FeedbackSignal>,
     /// Accumulated error signal events (across all resolves, for logging).
     error_events: Vec<ErrorEvent>,
+    /// Minimum cosine similarity for a node to bid into a coalition.
+    pub coalition_bid_threshold: f32,
+    /// Maximum number of nodes in a coalition.
+    pub coalition_max_size: usize,
+    /// Accumulated coalition log entries (for persistence).
+    coalition_log: Vec<Coalition>,
+    /// PRNG state for stochastic coalition selection (xorshift64).
+    coalition_rng: u64,
 }
 
 /// An error signal event for diagnostic logging.
@@ -156,6 +164,46 @@ pub struct ErrorEvent {
     pub confidence: f32,
     /// Magnitude of the error update applied to weights.
     pub error_magnitude: f32,
+}
+
+/// A member of a dynamic coalition formed after Surface escalation.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CoalitionMember {
+    /// Node identifier.
+    pub node_id: String,
+    /// Which tier this node belongs to.
+    pub tier: Tier,
+    /// Bid score: cosine similarity between input and node weight direction.
+    pub bid_score: f32,
+    /// Whether this node actually executed a forward pass in the coalition.
+    pub fired: bool,
+    /// Output confidence from the forward pass (0.0 if not fired).
+    pub confidence_out: f32,
+}
+
+/// A dynamic coalition formed per-input after Surface escalation.
+///
+/// Reasoning and Deep nodes bid for involvement based on cosine similarity
+/// between the input and their specialised weight direction. Top bidders
+/// form a temporary coalition; the highest-confidence member resolves.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Coalition {
+    /// Hash of the input tensor for identification.
+    pub input_hash: String,
+    /// Coalition members (both bidders who fired and those who didn't make the cut).
+    pub members: Vec<CoalitionMember>,
+    /// Number of nodes that bid above threshold.
+    pub bid_count: usize,
+    /// Coalition formation overhead in microseconds.
+    pub formation_time_us: u64,
+    /// Confidence of the resolving member.
+    pub resolution_confidence: f32,
+    /// Node ID of the highest-confidence coalition member.
+    pub resolved_by: String,
+    /// Tier of the resolving node.
+    pub resolved_tier: Tier,
+    /// Whether a cross-tier Reasoning→Deep blend was applied.
+    pub cross_tier_fired: bool,
 }
 
 /// Full result from the hierarchical resolver including tier information.
@@ -181,6 +229,8 @@ pub struct ResolveResult {
     pub cache_hit_similarity: f32,
     /// ID of the node that produced the cached entry (None if miss).
     pub cache_producer_id: Option<String>,
+    /// Coalition formation result (None if resolved at Surface or from cache).
+    pub coalition: Option<Coalition>,
 }
 
 impl HierarchicalResolver {
@@ -199,6 +249,10 @@ impl HierarchicalResolver {
             temporal_buffer: TemporalBuffer::new(16),
             feedback_log: Vec::new(),
             error_events: Vec::new(),
+            coalition_bid_threshold: 0.15,
+            coalition_max_size: 2,
+            coalition_log: Vec::new(),
+            coalition_rng: 12345,
         }
     }
 
@@ -219,21 +273,6 @@ impl HierarchicalResolver {
     /// Add a lateral edge between two nodes at the same tier.
     pub fn add_lateral_edge(&mut self, edge: LateralEdge) {
         self.lateral_edges.push(edge);
-    }
-
-    /// Run a set of tier-specific nodes on the input, returning best output.
-    fn run_tier_nodes(
-        nodes: &[Box<dyn ComputeNode>],
-        input: &Tensor,
-    ) -> Option<NodeOutput> {
-        let mut best: Option<NodeOutput> = None;
-        for node in nodes {
-            let output = node.forward(input);
-            if best.as_ref().map_or(true, |b| output.confidence > b.confidence) {
-                best = Some(output);
-            }
-        }
-        best
     }
 
     /// Run tier-specific nodes returning best output AND the winning node ID.
@@ -465,12 +504,18 @@ impl HierarchicalResolver {
             None
         };
 
-        // Phase 4: Escalate to Reasoning if needed
+        // Phase 4+5: Coalition formation after Surface escalation
+        //
+        // All R+D nodes bid simultaneously based on cosine similarity between
+        // input and their specialised weight direction. Top K bidders form a
+        // coalition; highest-confidence member resolves. Cross-tier blend fires
+        // when Deep resolves and a Reasoning node also bid strongly.
+        let mut coalition_result: Option<Coalition> = None;
         if escalation_conf < self.config.surface_confidence_threshold && !from_cache {
-            tier_reached = Tier::Reasoning;
-            trace.push("escalate_reasoning".to_string());
+            let coalition_start = std::time::Instant::now();
+            trace.push("escalate_coalition".to_string());
             trace_steps.push(TraceStep {
-                node_id: "escalate_reasoning".to_string(),
+                node_id: "escalate_coalition".to_string(),
                 tier: Tier::Reasoning,
                 direction: TraversalDirection::Forward,
                 confidence_in: confidence,
@@ -478,60 +523,192 @@ impl HierarchicalResolver {
                 was_cached: false,
             });
 
-            if let Some(reasoning_out) =
-                Self::run_tier_nodes(&self.reasoning_nodes, input)
-            {
-                let conf_in = confidence;
-                current_tensor = reasoning_out.tensor;
-                winning_path = "reasoning_standalone".to_string();
-                producer_node_id = Some("reasoning_standalone".to_string());
-                confidence = reasoning_out.confidence;
-                total_cost += reasoning_out.compute_cost;
-                trace_steps.push(TraceStep {
-                    node_id: "reasoning_standalone".to_string(),
-                    tier: Tier::Reasoning,
-                    direction: TraversalDirection::Forward,
-                    confidence_in: conf_in,
-                    confidence_out: confidence,
-                    was_cached: false,
-                });
+            // Step 1: Bidding — every R+D node computes bid score
+            let input_slice: Vec<f32> = if input.data.len() >= 128 {
+                input.data[..128].to_vec()
+            } else {
+                let mut v = input.data.clone();
+                v.resize(128, 0.0);
+                v
+            };
+            let input_norm: f32 = input_slice.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+            let mut bids: Vec<(String, Tier, f32, usize, bool)> = Vec::new(); // (id, tier, bid_score, index_in_group, is_graph)
+
+            // Graph R+D nodes
+            for (idx, node) in self.graph.nodes_ref().iter().enumerate() {
+                if node.tier() == Tier::Surface { continue; }
+                let dir = node.weight_direction();
+                if dir.is_empty() { continue; }
+                let dot: f32 = input_slice.iter().zip(dir.iter()).map(|(a, b)| a * b).sum();
+                let dir_norm: f32 = dir.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let cos = if input_norm > 1e-8 && dir_norm > 1e-8 {
+                    (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
+                } else { 0.0 };
+                bids.push((node.node_id().to_string(), node.tier(), cos, idx, true));
             }
-        }
+            // Standalone reasoning nodes
+            for (idx, node) in self.reasoning_nodes.iter().enumerate() {
+                let dir = node.weight_direction();
+                if dir.is_empty() { continue; }
+                let dot: f32 = input_slice.iter().zip(dir.iter()).map(|(a, b)| a * b).sum();
+                let dir_norm: f32 = dir.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let cos = if input_norm > 1e-8 && dir_norm > 1e-8 {
+                    (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
+                } else { 0.0 };
+                bids.push((node.node_id().to_string(), Tier::Reasoning, cos, idx, false));
+            }
+            // Standalone deep nodes
+            for (idx, node) in self.deep_nodes.iter().enumerate() {
+                let dir = node.weight_direction();
+                if dir.is_empty() { continue; }
+                let dot: f32 = input_slice.iter().zip(dir.iter()).map(|(a, b)| a * b).sum();
+                let dir_norm: f32 = dir.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let cos = if input_norm > 1e-8 && dir_norm > 1e-8 {
+                    (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
+                } else { 0.0 };
+                bids.push((node.node_id().to_string(), Tier::Deep, cos, idx, false));
+            }
 
-        // Phase 5: Escalate to Deep if still not confident
-        if confidence < self.config.reasoning_confidence_threshold && !from_cache {
-            tier_reached = Tier::Deep;
-            trace.push("escalate_deep".to_string());
-            trace_steps.push(TraceStep {
-                node_id: "escalate_deep".to_string(),
-                tier: Tier::Deep,
-                direction: TraversalDirection::Forward,
-                confidence_in: confidence,
-                confidence_out: confidence,
-                was_cached: false,
-            });
+            // Step 2: Stochastic weighted selection among candidates above threshold
+            let bid_threshold = self.coalition_bid_threshold;
+            let max_k = self.coalition_max_size;
 
-            if let Some(deep_out) = Self::run_tier_nodes(&self.deep_nodes, input) {
-                let conf_in = confidence;
-                current_tensor = deep_out.tensor;
-                winning_path = "deep_standalone".to_string();
-                producer_node_id = Some("deep_standalone".to_string());
-                confidence = deep_out.confidence;
-                total_cost += deep_out.compute_cost;
+            // Partition into qualified (above threshold) and all
+            let mut qualified: Vec<(String, Tier, f32, usize, bool)> = bids
+                .iter()
+                .filter(|b| b.2 >= bid_threshold)
+                .cloned()
+                .collect();
+            let bid_count = qualified.len();
+
+            // Fallback: if fewer than 2 qualified, take top 2 by bid score
+            let selected: Vec<(String, Tier, f32, usize, bool)> = if bid_count < 2 {
+                bids.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+                bids[..2.min(bids.len())].to_vec()
+            } else if bid_count <= max_k {
+                // All qualified fit — take them all
+                qualified
+            } else {
+                // Weighted random sampling without replacement
+                let mut chosen = Vec::with_capacity(max_k);
+                for _ in 0..max_k {
+                    let total_weight: f32 = qualified.iter().map(|b| b.2).sum();
+                    if total_weight < 1e-8 { break; }
+                    // xorshift64 PRNG step
+                    self.coalition_rng ^= self.coalition_rng << 13;
+                    self.coalition_rng ^= self.coalition_rng >> 7;
+                    self.coalition_rng ^= self.coalition_rng << 17;
+                    let r = (self.coalition_rng as f32 / u64::MAX as f32) * total_weight;
+                    let mut cumulative = 0.0f32;
+                    let mut pick_idx = qualified.len() - 1;
+                    for (j, b) in qualified.iter().enumerate() {
+                        cumulative += b.2;
+                        if cumulative >= r {
+                            pick_idx = j;
+                            break;
+                        }
+                    }
+                    chosen.push(qualified.remove(pick_idx));
+                }
+                chosen
+            };
+            let selected = &selected;
+
+            // Step 3: Coalition execution — run forward on selected nodes
+            let mut members = Vec::with_capacity(selected.len());
+            let mut best_member_conf = f32::NEG_INFINITY;
+            let mut best_member_id = String::new();
+            let mut best_member_tier = Tier::Reasoning;
+            let mut best_member_tensor: Option<crate::Tensor> = None;
+            let mut best_member_cost = 0.0f32;
+
+            // Also track best Reasoning member for cross-tier blend
+            let mut best_reasoning_conf = f32::NEG_INFINITY;
+            let mut best_reasoning_tensor: Option<crate::Tensor> = None;
+            let mut best_reasoning_bid = 0.0f32;
+
+            for &(ref nid, tier, bid_score, idx, is_graph) in selected {
+                let output = if is_graph {
+                    self.graph.nodes_ref()[idx].forward(input)
+                } else {
+                    match tier {
+                        Tier::Reasoning => self.reasoning_nodes[idx].forward(input),
+                        Tier::Deep => self.deep_nodes[idx].forward(input),
+                        _ => continue,
+                    }
+                };
+
+                let member = CoalitionMember {
+                    node_id: nid.clone(),
+                    tier,
+                    bid_score,
+                    fired: true,
+                    confidence_out: output.confidence,
+                };
+                members.push(member);
+
+                if output.confidence > best_member_conf {
+                    best_member_conf = output.confidence;
+                    best_member_id = nid.clone();
+                    best_member_tier = tier;
+                    best_member_tensor = Some(output.tensor.clone());
+                    best_member_cost = output.compute_cost;
+                }
+
+                if tier == Tier::Reasoning && output.confidence > best_reasoning_conf {
+                    best_reasoning_conf = output.confidence;
+                    best_reasoning_tensor = Some(output.tensor.clone());
+                    best_reasoning_bid = bid_score;
+                }
+            }
+
+            // Step 4: Resolution — highest-confidence member becomes resolver
+            let mut cross_tier_fired = false;
+            if let Some(best_tensor) = best_member_tensor {
+                // Step 5: Cross-tier connection — Reasoning→Deep blend
+                // If resolver is Deep and a Reasoning node bid > 0.5, blend outputs
+                current_tensor = if best_member_tier == Tier::Deep
+                    && best_reasoning_bid > 0.5
+                    && best_reasoning_tensor.is_some()
+                {
+                    cross_tier_fired = true;
+                    let r_tensor = best_reasoning_tensor.unwrap();
+                    // Blend: 0.3 Reasoning + 0.7 Deep
+                    best_tensor.blend(&r_tensor, 0.7)
+                } else {
+                    best_tensor
+                };
+
+                tier_reached = best_member_tier;
+                confidence = best_member_conf;
+                winning_path = format!("coalition_{}", best_member_id);
+                producer_node_id = Some(best_member_id.clone());
+                total_cost += best_member_cost;
+
                 trace_steps.push(TraceStep {
-                    node_id: "deep_standalone".to_string(),
-                    tier: Tier::Deep,
+                    node_id: format!("coalition:{}", best_member_id),
+                    tier: best_member_tier,
                     direction: TraversalDirection::Forward,
-                    confidence_in: conf_in,
+                    confidence_in: escalation_conf,
                     confidence_out: confidence,
                     was_cached: false,
                 });
 
-                // Phase 6: Feedback
-                if confidence > 0.80 {
-                    let delta = -0.01;
-                    let signal =
-                        FeedbackSignal::low_confidence_resolved("deep_standalone", delta);
+                if cross_tier_fired {
+                    trace_steps.push(TraceStep {
+                        node_id: "cross_tier_blend".to_string(),
+                        tier: Tier::Deep,
+                        direction: TraversalDirection::Lateral,
+                        confidence_in: best_reasoning_conf,
+                        confidence_out: confidence,
+                        was_cached: false,
+                    });
+                }
+
+                // Feedback signal if Deep resolved confidently
+                if best_member_tier == Tier::Deep && confidence > 0.80 {
+                    let signal = FeedbackSignal::low_confidence_resolved(&best_member_id, -0.01);
                     trace.push("feedback_up".to_string());
                     trace_steps.push(TraceStep {
                         node_id: "feedback_up".to_string(),
@@ -544,6 +721,25 @@ impl HierarchicalResolver {
                     self.feedback_log.push(signal);
                 }
             }
+
+            // Compute input hash for logging
+            let hash_val: u64 = input.data.iter()
+                .take(16)
+                .fold(0u64, |h, &v| h.wrapping_mul(31).wrapping_add(v.to_bits() as u64));
+            let input_hash = format!("{:016x}", hash_val);
+
+            let coalition = Coalition {
+                input_hash,
+                members,
+                bid_count,
+                formation_time_us: coalition_start.elapsed().as_micros() as u64,
+                resolution_confidence: confidence,
+                resolved_by: best_member_id,
+                resolved_tier: tier_reached,
+                cross_tier_fired,
+            };
+            self.coalition_log.push(coalition.clone());
+            coalition_result = Some(coalition);
         }
 
         // Phase 7: Cache the result (skipped in Training mode)
@@ -585,6 +781,7 @@ impl HierarchicalResolver {
             surface_output,
             cache_hit_similarity,
             cache_producer_id,
+            coalition: coalition_result,
         }
     }
 
@@ -667,32 +864,46 @@ impl HierarchicalResolver {
         // Oja's rule is self-normalizing for signal=+1 but divergent for any
         // negative signal (the y²*w term grows weights instead of shrinking them).
         // Contrastive learning now handles discrimination between tiers.
-        let suppress = 0.0;
-        match result.tier_reached {
-            Tier::Surface => {
-                // Reinforce Surface, gently suppress Reasoning and Deep
-                Self::hebbian_nodes(&mut self.surface_nodes, input, 1.0, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.lateral_nodes, input, 1.0, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.reasoning_nodes, input, suppress, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.deep_nodes, input, suppress, learning_rate, total_iterations);
-                self.graph.hebbian_update_all(input, 1.0, learning_rate, total_iterations);
+        if let Some(ref coalition) = result.coalition {
+            // Coalition learning: only fired coalition members get Oja updates.
+            // Surface is frozen and never participates in coalitions.
+            // Non-fired nodes receive no update — differential activation drives specialisation.
+            let fired_ids: Vec<&str> = coalition.members.iter()
+                .filter(|m| m.fired)
+                .map(|m| m.node_id.as_str())
+                .collect();
+
+            // Update graph R+D nodes that participated
+            for node in self.graph.nodes_mut() {
+                if node.tier() == Tier::Surface || node.is_frozen() { continue; }
+                let signal = if fired_ids.contains(&node.node_id()) { 1.0 } else { 0.0 };
+                if signal > 0.0 {
+                    let output = node.forward(input);
+                    node.hebbian_update(input, &output.tensor, signal, learning_rate);
+                }
             }
-            Tier::Reasoning => {
-                // Gently suppress Surface, reinforce Reasoning
-                Self::hebbian_nodes(&mut self.surface_nodes, input, suppress, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.lateral_nodes, input, suppress, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.reasoning_nodes, input, 1.0, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.deep_nodes, input, suppress, learning_rate, total_iterations);
-                self.graph.hebbian_update_all(input, suppress, learning_rate, total_iterations);
+            // Update standalone reasoning nodes that participated
+            for node in self.reasoning_nodes.iter_mut() {
+                let signal = if fired_ids.contains(&node.node_id()) { 1.0 } else { 0.0 };
+                if signal > 0.0 {
+                    let output = node.forward(input);
+                    node.hebbian_update(input, &output.tensor, signal, learning_rate);
+                }
             }
-            Tier::Deep => {
-                // Gently suppress Surface and Reasoning, reinforce Deep
-                Self::hebbian_nodes(&mut self.surface_nodes, input, suppress, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.lateral_nodes, input, suppress, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.reasoning_nodes, input, suppress, learning_rate, total_iterations);
-                Self::hebbian_nodes(&mut self.deep_nodes, input, 1.0, learning_rate, total_iterations);
-                self.graph.hebbian_update_all(input, suppress, learning_rate, total_iterations);
+            // Update standalone deep nodes that participated
+            for node in self.deep_nodes.iter_mut() {
+                let signal = if fired_ids.contains(&node.node_id()) { 1.0 } else { 0.0 };
+                if signal > 0.0 {
+                    let output = node.forward(input);
+                    node.hebbian_update(input, &output.tensor, signal, learning_rate);
+                }
             }
+            // Surface and lateral nodes: no Oja update (frozen / not in coalition)
+        } else {
+            // No coalition (Surface resolved) — standard tier-based learning
+            Self::hebbian_nodes(&mut self.surface_nodes, input, 1.0, learning_rate, total_iterations);
+            Self::hebbian_nodes(&mut self.lateral_nodes, input, 1.0, learning_rate, total_iterations);
+            self.graph.hebbian_update_all(input, 1.0, learning_rate, total_iterations);
         }
     }
 
@@ -1178,6 +1389,99 @@ impl HierarchicalResolver {
             total += node.weight_norm();
         }
         total
+    }
+
+    /// Initialise all Reasoning and Deep nodes with orthogonal weight directions.
+    ///
+    /// Generates orthogonal basis vectors via Gram-Schmidt and applies one to each
+    /// R+D node. Surface nodes are left unchanged (frozen analytical). Returns the
+    /// mean pairwise cosine similarity between all R+D node directions (target < 0.3).
+    pub fn init_reasoning_deep_orthogonal(&mut self) -> f32 {
+        // Collect R+D node indices and input_dim
+        let mut rd_count = 0usize;
+        let mut input_dim = 128usize;
+
+        // Count R+D nodes in graph
+        for node in self.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                rd_count += 1;
+                let wd = node.weight_direction();
+                if !wd.is_empty() {
+                    input_dim = wd.len();
+                }
+            }
+        }
+        let graph_rd_count = rd_count;
+        let reasoning_count = self.reasoning_nodes.len();
+        let deep_count = self.deep_nodes.len();
+        rd_count += reasoning_count + deep_count;
+
+        if rd_count == 0 {
+            return 0.0;
+        }
+
+        // Generate orthogonal basis
+        let orth = crate::graph::node::OrthogonalInit::generate(rd_count, input_dim, 13_37);
+
+        // Apply to graph R+D nodes
+        let mut basis_idx = 0usize;
+        for node in self.graph.nodes_mut() {
+            if node.tier() != Tier::Surface {
+                node.init_orthogonal(&orth.basis_vectors[basis_idx], orth.noise_scale, 3000 + basis_idx as u64);
+                basis_idx += 1;
+            }
+        }
+
+        // Apply to standalone reasoning nodes
+        for (i, node) in self.reasoning_nodes.iter_mut().enumerate() {
+            node.init_orthogonal(&orth.basis_vectors[graph_rd_count + i], orth.noise_scale, 4000 + i as u64);
+        }
+
+        // Apply to standalone deep nodes
+        for (i, node) in self.deep_nodes.iter_mut().enumerate() {
+            node.init_orthogonal(&orth.basis_vectors[graph_rd_count + reasoning_count + i], orth.noise_scale, 5000 + i as u64);
+        }
+
+        // Compute and log pairwise cosine similarities
+        let mut directions: Vec<(String, Vec<f32>)> = Vec::with_capacity(rd_count);
+        for node in self.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                directions.push((node.node_id().to_string(), node.weight_direction()));
+            }
+        }
+        for node in &self.reasoning_nodes {
+            directions.push((node.node_id().to_string(), node.weight_direction()));
+        }
+        for node in &self.deep_nodes {
+            directions.push((node.node_id().to_string(), node.weight_direction()));
+        }
+
+        // Pairwise cosine similarities
+        let n = directions.len();
+        let mut sum_cos = 0.0f32;
+        let mut pair_count = 0usize;
+        let mut max_cos = 0.0f32;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let dot: f32 = directions[i].1.iter().zip(directions[j].1.iter()).map(|(a, b)| a * b).sum();
+                let ni: f32 = directions[i].1.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let nj: f32 = directions[j].1.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let cos = if ni > 1e-8 && nj > 1e-8 { (dot / (ni * nj)).abs() } else { 0.0 };
+                sum_cos += cos;
+                pair_count += 1;
+                if cos > max_cos {
+                    max_cos = cos;
+                }
+            }
+        }
+
+        let mean_cos = if pair_count > 0 { sum_cos / pair_count as f32 } else { 0.0 };
+        eprintln!(
+            "Orthogonal init: {} R+D nodes, {} dims, mean pairwise |cos| = {:.4}, max |cos| = {:.4}",
+            n, input_dim, mean_cos, max_cos
+        );
+
+        mean_cos
     }
 
     /// Build a default AXIOM resolver with a reasonable graph topology.
@@ -1754,6 +2058,83 @@ impl HierarchicalResolver {
     ///
     /// Collects weight data from every trainable node (graph, surface,
     /// reasoning, deep, lateral) and writes to the given path.
+    /// Compute mean pairwise |cosine similarity| between all R+D node weight directions.
+    ///
+    /// Returns (mean_pairwise_cos, max_pairwise_cos). Lower values indicate greater
+    /// specialisation — nodes are pointing in more different directions.
+    pub fn rd_pairwise_cosine(&self) -> (f32, f32) {
+        let mut directions: Vec<Vec<f32>> = Vec::new();
+        for node in self.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                let d = node.weight_direction();
+                if !d.is_empty() { directions.push(d); }
+            }
+        }
+        for node in &self.reasoning_nodes {
+            let d = node.weight_direction();
+            if !d.is_empty() { directions.push(d); }
+        }
+        for node in &self.deep_nodes {
+            let d = node.weight_direction();
+            if !d.is_empty() { directions.push(d); }
+        }
+
+        let n = directions.len();
+        if n < 2 { return (0.0, 0.0); }
+
+        let mut sum_cos = 0.0f32;
+        let mut max_cos = 0.0f32;
+        let mut pair_count = 0usize;
+        for i in 0..n {
+            let ni: f32 = directions[i].iter().map(|x| x * x).sum::<f32>().sqrt();
+            for j in (i + 1)..n {
+                let dot: f32 = directions[i].iter().zip(directions[j].iter()).map(|(a, b)| a * b).sum();
+                let nj: f32 = directions[j].iter().map(|x| x * x).sum::<f32>().sqrt();
+                let cos = if ni > 1e-8 && nj > 1e-8 { (dot / (ni * nj)).abs() } else { 0.0 };
+                sum_cos += cos;
+                if cos > max_cos { max_cos = cos; }
+                pair_count += 1;
+            }
+        }
+        let mean = if pair_count > 0 { sum_cos / pair_count as f32 } else { 0.0 };
+        (mean, max_cos)
+    }
+
+    /// Return node activation counts for coalition tracking.
+    /// Returns Vec of (node_id, tier, activation_count) for all R+D nodes.
+    pub fn rd_activation_counts(&self) -> Vec<(String, Tier, usize)> {
+        let mut counts = Vec::new();
+        for node in self.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                counts.push((node.node_id().to_string(), node.tier(), node.activation_count()));
+            }
+        }
+        for node in &self.reasoning_nodes {
+            counts.push((node.node_id().to_string(), node.tier(), node.activation_count()));
+        }
+        for node in &self.deep_nodes {
+            counts.push((node.node_id().to_string(), node.tier(), node.activation_count()));
+        }
+        counts
+    }
+
+    /// Save accumulated coalition log to a JSON file.
+    pub fn save_coalition_log(&self, path: &str) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(&self.coalition_log)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        std::fs::write(path, json)
+    }
+
+    /// Access the accumulated coalition log entries.
+    pub fn coalition_log(&self) -> &[Coalition] {
+        &self.coalition_log
+    }
+
+    /// Clear the coalition log (e.g. between training passes).
+    pub fn clear_coalition_log(&mut self) {
+        self.coalition_log.clear();
+    }
+
     pub fn save_all_weights(&self, path: &str) -> std::io::Result<()> {
         use crate::graph::node::NodeWeightsData;
 
@@ -1908,14 +2289,18 @@ mod tests {
         let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
         let result = resolver.resolve(&input);
 
-        // Should have escalated past Surface
+        // Should have escalated past Surface via coalition
         assert_ne!(result.tier_reached, Tier::Surface);
         assert!(
             result
                 .route
                 .execution_trace
-                .contains(&"escalate_reasoning".to_string())
+                .contains(&"escalate_coalition".to_string()),
+            "Expected 'escalate_coalition' in trace: {:?}",
+            result.route.execution_trace
         );
+        // Coalition should have formed
+        assert!(result.coalition.is_some(), "Coalition should form on escalation");
     }
 
     #[test]
@@ -2430,5 +2815,463 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_init_reasoning_deep_orthogonal_leaves_surface_unchanged() {
+        use crate::input::{Encoder, Tokeniser};
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+
+        // First do analytical Surface init
+        let tokeniser = Tokeniser::default_tokeniser();
+        let encoder = Encoder::new(128, tokeniser);
+        let simple = ["the sky is blue", "it is raining", "she runs fast"];
+        let complex = ["consciousness remains profound", "the interplay drives dynamics", "dark matter constitutes"];
+        let simple_t: Vec<Tensor> = simple.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = complex.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+
+        // Capture Surface weight norms before orthogonal init
+        let surface_norm_before = resolver.surface_weight_norm();
+        let mut surface_directions_before = Vec::new();
+        for node in resolver.graph.nodes_ref() {
+            if node.tier() == Tier::Surface {
+                surface_directions_before.push(node.weight_direction());
+            }
+        }
+
+        // Apply orthogonal init to R+D nodes
+        let mean_cos = resolver.init_reasoning_deep_orthogonal();
+
+        // Surface nodes must be unchanged
+        let surface_norm_after = resolver.surface_weight_norm();
+        assert!(
+            (surface_norm_before - surface_norm_after).abs() < 1e-4,
+            "Surface weight norm changed: {:.4} → {:.4}",
+            surface_norm_before, surface_norm_after
+        );
+
+        let mut idx = 0;
+        for node in resolver.graph.nodes_ref() {
+            if node.tier() == Tier::Surface {
+                let dir_after = node.weight_direction();
+                assert_eq!(
+                    dir_after, surface_directions_before[idx],
+                    "Surface node '{}' weight direction changed after orthogonal init",
+                    node.node_id()
+                );
+                idx += 1;
+            }
+        }
+
+        // Mean pairwise cos should be low
+        assert!(
+            mean_cos < 0.3,
+            "Mean pairwise |cos| = {:.4}, exceeds target of 0.3",
+            mean_cos
+        );
+    }
+
+    #[test]
+    fn test_orthogonal_init_rd_node_diversity() {
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        resolver.init_reasoning_deep_orthogonal();
+
+        // Collect all R+D weight directions
+        let mut directions = Vec::new();
+        for node in resolver.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                directions.push(node.weight_direction());
+            }
+        }
+        for node in &resolver.reasoning_nodes {
+            directions.push(node.weight_direction());
+        }
+        for node in &resolver.deep_nodes {
+            directions.push(node.weight_direction());
+        }
+
+        // Should have 18 R+D nodes (4 graph reasoning + 2 graph deep + 8 standalone reasoning + 4 standalone deep)
+        assert_eq!(directions.len(), 18, "Expected 18 R+D nodes");
+
+        // All pairwise cosine similarities should be < 0.3
+        for i in 0..directions.len() {
+            for j in (i + 1)..directions.len() {
+                let dot: f32 = directions[i].iter().zip(directions[j].iter()).map(|(a, b)| a * b).sum();
+                let ni: f32 = directions[i].iter().map(|x| x * x).sum::<f32>().sqrt();
+                let nj: f32 = directions[j].iter().map(|x| x * x).sum::<f32>().sqrt();
+                let cos = if ni > 1e-8 && nj > 1e-8 { (dot / (ni * nj)).abs() } else { 0.0 };
+                assert!(
+                    cos < 0.3,
+                    "R+D nodes {} and {} have |cos| = {:.4}, exceeds 0.3",
+                    i, j, cos
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_coalition_forms_on_escalation() {
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        resolver.init_reasoning_deep_orthogonal();
+        resolver.mode = RouteMode::Training;
+        // Force escalation by setting threshold above any possible Surface confidence
+        resolver.config.surface_confidence_threshold = 0.99;
+
+        let input = Tensor::from_vec(vec![0.5; 128]);
+        let result = resolver.resolve(&input);
+
+        // Coalition should have formed
+        assert!(result.coalition.is_some(), "Coalition should form on escalation");
+        let coalition = result.coalition.unwrap();
+        assert!(!coalition.members.is_empty(), "Coalition should have members");
+        assert!(coalition.members.len() >= 2, "Coalition min size is 2");
+        assert!(coalition.members.len() <= 2, "Coalition max size is 2");
+        assert!(!coalition.resolved_by.is_empty(), "Coalition must have a resolver");
+    }
+
+    #[test]
+    fn test_coalition_size_clamping() {
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        resolver.init_reasoning_deep_orthogonal();
+        resolver.mode = RouteMode::Training;
+        resolver.coalition_max_size = 3; // Lower max
+
+        let input = Tensor::from_vec(vec![0.001; 128]);
+        let result = resolver.resolve(&input);
+
+        if let Some(coalition) = result.coalition {
+            assert!(
+                coalition.members.len() <= 3,
+                "Coalition size {} exceeds max 3",
+                coalition.members.len()
+            );
+        }
+    }
+
+    #[test]
+    fn test_no_coalition_when_surface_resolves() {
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+
+        // Use init_surface_analytical with test data for high Surface confidence
+        use crate::input::{Encoder, Tokeniser};
+        let tokeniser = Tokeniser::default_tokeniser();
+        let encoder = Encoder::new(128, tokeniser);
+        let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs"]
+            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = ["consciousness remains profound", "interplay drives", "dark matter"]
+            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.mode = RouteMode::Training;
+
+        // Simple sentence should stay at Surface — no coalition
+        let simple_input = encoder.encode_text_readonly("the sky is blue");
+        let result = resolver.resolve(&simple_input);
+        assert!(
+            result.coalition.is_none(),
+            "Surface-resolved input should not form a coalition"
+        );
+    }
+
+    #[test]
+    fn test_coalition_cross_tier_blend() {
+        // Build a minimal resolver with specific nodes to test cross-tier blend
+        let mut graph = SparseGraph::new("low_conf");
+        graph.add_node(Box::new(LinearNode::new(
+            "low_conf", 4, 4, Tier::Surface, 0.3,
+        )));
+
+        let cache = EmbeddingCache::new(256, 0.92);
+        let config = TierConfig {
+            surface_confidence_threshold: 0.85,
+            reasoning_confidence_threshold: 0.70,
+        };
+        let mut resolver = HierarchicalResolver::new(graph, cache, config);
+
+        // Add R+D nodes with specific initialisation
+        resolver.add_tier_node(Box::new(LinearNode::new(
+            "reasoning_a", 4, 4, Tier::Reasoning, 0.80,
+        )));
+        resolver.add_tier_node(Box::new(LinearNode::new(
+            "deep_a", 4, 4, Tier::Deep, 0.95,
+        )));
+
+        let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+        let result = resolver.resolve(&input);
+
+        // Should have formed a coalition
+        assert!(result.coalition.is_some());
+        let coalition = result.coalition.unwrap();
+        // All members should have fired
+        assert!(coalition.members.iter().all(|m| m.fired));
+    }
+
+    #[test]
+    fn test_coalition_log_accumulates() {
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        resolver.init_reasoning_deep_orthogonal();
+        resolver.mode = RouteMode::Training;
+        resolver.config.surface_confidence_threshold = 0.99;
+
+        // Run several escalating inputs
+        for i in 0..5 {
+            let mut data = vec![0.5; 128];
+            data[i % 128] = 1.0; // slight variation
+            let input = Tensor::from_vec(data);
+            resolver.resolve(&input);
+        }
+
+        assert!(
+            resolver.coalition_log().len() >= 1,
+            "Coalition log should accumulate entries"
+        );
+    }
+
+    #[test]
+    fn test_coalition_surface_invariant_preserved() {
+        use crate::input::{Encoder, Tokeniser};
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+
+        let tokeniser = Tokeniser::default_tokeniser();
+        let encoder = Encoder::new(128, tokeniser);
+        let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs"]
+            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = ["consciousness remains profound", "interplay drives", "dark matter"]
+            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.init_reasoning_deep_orthogonal();
+        resolver.mode = RouteMode::Training;
+        resolver.config.surface_confidence_threshold = 0.99; // force escalation
+
+        // Capture Surface weight norm
+        let surface_norm_before = resolver.surface_weight_norm();
+
+        // Run several inputs that will escalate and form coalitions
+        for _ in 0..20 {
+            let input = Tensor::from_vec(vec![0.5; 128]);
+            resolver.resolve(&input);
+        }
+
+        // Surface weights must be unchanged
+        let surface_norm_after = resolver.surface_weight_norm();
+        assert!(
+            (surface_norm_before - surface_norm_after).abs() < 1e-4,
+            "Surface weights changed during coalition: {:.4} → {:.4}",
+            surface_norm_before, surface_norm_after
+        );
+    }
+
+    #[test]
+    fn test_coalition_sizing_on_text() {
+        use crate::input::{Encoder, Tokeniser};
+
+        let sentences = [
+            "the cat sat on the mat",
+            "she runs every morning",
+            "the sky is blue today",
+            "water flows downhill naturally",
+            "birds fly south for winter",
+            "he reads books at night",
+            "the dog barked loudly",
+            "rain falls from clouds",
+            "the sun shines brightly",
+            "fish swim in the ocean",
+            "the consciousness of the observer fundamentally determines what can be measured",
+            "neural networks approximate complex nonlinear functions through hierarchical representations",
+            "the interplay between cooperation and competition drives evolutionary dynamics",
+            "dark matter constitutes approximately twenty seven percent of the observable universe",
+            "she said that he thought that they believed it was true",
+            "the cat that the dog that the man owned chased sat on the mat",
+            "Cogito ergo sum",
+            "Being precedes essence",
+            "the mitochondria is the powerhouse of the cell",
+            "photosynthesis converts sunlight into chemical energy efficiently",
+            "the big red dog ran quickly down the long straight road",
+            "if then else",
+            "go",
+            "quantum entanglement creates correlations that cannot be explained classically",
+            "the teacher who the students respected retired last year",
+            "it is raining today",
+            "she runs fast",
+            "the tintinnabulation resonated melodiously",
+            "machine learning models require large amounts of training data",
+            "the quick brown fox jumped over the lazy sleeping dog",
+            "epistemological foundations of scientific inquiry remain contentious",
+            "a rose by any other name would smell as sweet",
+            "the committee decided to postpone the meeting until further notice",
+            "abstract algebra unifies seemingly disparate mathematical structures",
+            "he went to the store and bought milk and bread and cheese",
+            "freedom is just another word for nothing left to lose",
+            "the recursive algorithm terminates when the base case is reached",
+            "she smiled warmly at the stranger across the crowded room",
+            "thermodynamic entropy always increases in isolated systems",
+            "the old man and the sea tells the story of perseverance",
+            "parallel computing distributes workload across multiple processing units",
+            "they walked slowly through the ancient forest listening to the birds",
+            "mathematical induction proves statements about all natural numbers",
+            "the philosopher argued that knowledge requires justified true belief",
+            "simple sentences are easy to understand and parse quickly",
+            "neurotransmitters facilitate communication between neurons across synaptic gaps",
+            "the children played happily in the garden all afternoon",
+            "topology studies properties preserved under continuous deformations",
+            "an apple fell on his head and he discovered gravity",
+            "the boundary between order and chaos defines complexity itself",
+        ];
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+
+        let tokeniser = Tokeniser::default_tokeniser();
+        let encoder = Encoder::new(128, tokeniser);
+
+        // Analytical Surface init
+        let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs", "water flows", "he reads"]
+            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = [
+            "consciousness determines measurement",
+            "neural networks approximate functions",
+            "interplay drives dynamics",
+        ].iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.init_reasoning_deep_orthogonal();
+        // Recalibrate AFTER analytical init so thresholds match current confidences
+        resolver.calibrate(128, 0.65, 0.35);
+        resolver.mode = RouteMode::Training;
+
+        let mut coalition_sizes = Vec::new();
+        let mut bid_counts = Vec::new();
+
+        for sentence in &sentences {
+            let tensor = encoder.encode_text_readonly(sentence);
+            let result = resolver.resolve(&tensor);
+            if let Some(coal) = &result.coalition {
+                coalition_sizes.push(coal.members.len());
+                bid_counts.push(coal.bid_count);
+            }
+        }
+
+        let n = coalition_sizes.len();
+        if n > 0 {
+            let mean_size = coalition_sizes.iter().sum::<usize>() as f32 / n as f32;
+            let min_bids = bid_counts.iter().copied().min().unwrap_or(0);
+            let max_bids = bid_counts.iter().copied().max().unwrap_or(0);
+            let mean_bids = bid_counts.iter().sum::<usize>() as f32 / n as f32;
+            eprintln!(
+                "Coalition sizing: {}/{} inputs escalated, mean coalition size = {:.1}, \
+                 bid count range = [{}, {}], mean bids = {:.1}, threshold = {}",
+                n, sentences.len(), mean_size, min_bids, max_bids, mean_bids,
+                resolver.coalition_bid_threshold
+            );
+
+            // Print 5 sample coalition events
+            let log = resolver.coalition_log();
+            eprintln!("\n--- Sample coalition events (up to 5) ---");
+            for (i, coal) in log.iter().take(5).enumerate() {
+                let member_desc: Vec<String> = coal.members.iter()
+                    .map(|m| format!("{}({:?}, bid={:.3}, conf={:.3})", m.node_id, m.tier, m.bid_score, m.confidence_out))
+                    .collect();
+                eprintln!(
+                    "  [{}] resolved_by={} ({:?}), coalition=[{}], cross_tier={}, bids={}",
+                    i + 1, coal.resolved_by, coal.resolved_tier,
+                    member_desc.join(", "), coal.cross_tier_fired, coal.bid_count
+                );
+            }
+
+            // Check for diversity: count unique resolver nodes
+            let mut resolver_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for coal in log {
+                resolver_set.insert(coal.resolved_by.clone());
+            }
+            eprintln!(
+                "\nUnique resolver nodes: {}/{} coalitions",
+                resolver_set.len(), log.len()
+            );
+
+            // Target: mean coalition size between 1.5 and 2.0 (max_coalition_size=2)
+            assert!(
+                mean_size >= 1.5 && mean_size <= 2.0,
+                "Mean coalition size {:.1} outside acceptable range [1.5, 2.0]",
+                mean_size
+            );
+        } else {
+            eprintln!("Coalition sizing: 0/{} inputs escalated — all stayed Surface", sentences.len());
+        }
+    }
+
+    #[test]
+    fn test_stochastic_coalition_produces_varied_members() {
+        // Run 100 resolves with the SAME input — stochastic selection should
+        // produce different coalition member pairs across runs.
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+
+        use crate::input::{Encoder, Tokeniser};
+        let tokeniser = Tokeniser::default_tokeniser();
+        let encoder = Encoder::new(128, tokeniser);
+
+        let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs"]
+            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = [
+            "consciousness determines measurement",
+            "neural networks approximate functions",
+        ].iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.init_reasoning_deep_orthogonal();
+        resolver.calibrate(128, 0.65, 0.35);
+        resolver.mode = RouteMode::Training;
+
+        // Force escalation so coalition forms
+        resolver.config.surface_confidence_threshold = 0.99;
+
+        let input = encoder.encode_text_readonly(
+            "the recursive nature of self-referential systems creates emergent properties"
+        );
+
+        let mut member_sets: std::collections::HashSet<Vec<String>> = std::collections::HashSet::new();
+        let mut all_node_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for _ in 0..100 {
+            let result = resolver.resolve(&input);
+            if let Some(coal) = &result.coalition {
+                let mut ids: Vec<String> = coal.members.iter()
+                    .map(|m| m.node_id.clone())
+                    .collect();
+                ids.sort();
+                for id in &ids {
+                    all_node_ids.insert(id.clone());
+                }
+                member_sets.insert(ids);
+            }
+        }
+
+        eprintln!(
+            "Stochastic coalition test: {} unique member-sets from 100 calls, {} unique nodes total",
+            member_sets.len(), all_node_ids.len()
+        );
+
+        // With stochastic weighted sampling, the same input should NOT always
+        // produce the same coalition pair — we need at least 2 distinct member-sets
+        // to confirm randomness is working.
+        assert!(
+            member_sets.len() >= 2,
+            "Expected at least 2 distinct coalition member-sets (stochastic), got {}",
+            member_sets.len()
+        );
+        // At least 3 unique nodes should appear — stochastic sampling ensures
+        // nodes beyond the top-2 get occasional selection
+        assert!(
+            all_node_ids.len() >= 3,
+            "Expected at least 3 unique nodes across 100 calls, got {}",
+            all_node_ids.len()
+        );
     }
 }
