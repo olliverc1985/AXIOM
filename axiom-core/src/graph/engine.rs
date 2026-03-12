@@ -67,6 +67,8 @@ pub struct RouteResult {
     pub lateral_count: u32,
     /// Number of lateral traversals that prevented escalation.
     pub lateral_prevented_escalation: u32,
+    /// ID of the node that produced the final output.
+    pub producer_node_id: Option<String>,
 }
 
 /// The sparse computation graph.
@@ -132,8 +134,8 @@ impl SparseGraph {
         // Start at entry node
         let mut current_node_id = self.entry_node.clone();
 
-        for _step in 0..16 {
-            // Max 16 steps to prevent infinite loops
+        for _step in 0..20 {
+            // Max 20 steps to prevent infinite loops
             if visited.contains_key(&current_node_id) {
                 break; // Prevent cycles
             }
@@ -183,6 +185,8 @@ impl SparseGraph {
             }
         }
 
+        let producer_node_id = trace.last().cloned();
+
         RouteResult {
             output: current_tensor,
             confidence,
@@ -192,6 +196,7 @@ impl SparseGraph {
             cache_hits: 0, // Set by the resolver when cache is involved
             lateral_count: 0,
             lateral_prevented_escalation: 0,
+            producer_node_id,
         }
     }
 
@@ -210,19 +215,117 @@ impl SparseGraph {
         self.nodes.iter().map(|n| n.weight_count()).sum()
     }
 
-    /// Apply Hebbian learning to all graph nodes.
+    /// Apply Hebbian learning to all graph nodes with usage-proportional lr.
     ///
     /// `input` is the original input tensor, `signal` is +1.0 (reinforce) or -1.0 (suppress).
-    pub fn hebbian_update_all(&mut self, input: &Tensor, signal: f32, learning_rate: f32) {
+    /// `total_iterations` is the pass iteration count for computing effective_lr.
+    /// effective_lr = base_lr * (total_iterations / (node_activation_count + 1))
+    pub fn hebbian_update_all(&mut self, input: &Tensor, signal: f32, learning_rate: f32, total_iterations: usize) {
+        let max_lr = learning_rate * 10.0;
         for node in &mut self.nodes {
+            let effective_lr = (learning_rate * (total_iterations as f32 / (node.activation_count() as f32 + 1.0))).min(max_lr);
             let output = node.forward(input);
-            node.hebbian_update(input, &output.tensor, signal, learning_rate);
+            node.hebbian_update(input, &output.tensor, signal, effective_lr);
         }
+    }
+
+    /// Increment activation counters for all nodes matching the given tier.
+    pub fn increment_activations_for_tier(&mut self, tier: Tier) {
+        for node in &mut self.nodes {
+            if node.tier() == tier {
+                node.increment_activation();
+            }
+        }
+    }
+
+    /// Mutable access to all nodes in the graph.
+    pub fn nodes_mut(&mut self) -> &mut Vec<Box<dyn ComputeNode>> {
+        &mut self.nodes
+    }
+
+    /// Immutable access to all nodes in the graph.
+    pub fn nodes_ref(&self) -> &[Box<dyn ComputeNode>] {
+        &self.nodes
+    }
+
+    /// Reset all node activation counters.
+    pub fn reset_activations(&mut self) {
+        for node in &mut self.nodes {
+            node.reset_activation();
+        }
+    }
+
+    /// Apply error signal update to a specific node by ID.
+    ///
+    /// Returns true if the node was found and updated.
+    pub fn error_update_node(
+        &mut self,
+        node_id: &str,
+        input: &Tensor,
+        output: &Tensor,
+        error_lr: f32,
+        modulator: f32,
+    ) -> bool {
+        for node in &mut self.nodes {
+            if node.node_id() == node_id {
+                node.error_update(input, output, error_lr, modulator);
+                return true;
+            }
+        }
+        false
     }
 
     /// Sum of weight norms across all nodes (for drift tracking).
     pub fn total_weight_norm(&self) -> f32 {
         self.nodes.iter().map(|n| n.weight_norm()).sum()
+    }
+
+    /// Accumulate contrastive example on all Surface-tier nodes in the graph.
+    ///
+    /// `positive` = true for Surface-resolved inputs, false for escalated inputs.
+    pub fn accumulate_contrastive_all(&mut self, input: &Tensor, positive: bool) {
+        for node in &mut self.nodes {
+            if node.tier() == Tier::Surface {
+                if positive {
+                    node.accumulate_positive(input);
+                } else {
+                    node.accumulate_negative(input);
+                }
+            }
+        }
+    }
+
+    /// Apply contrastive update on all Surface-tier nodes in the graph.
+    ///
+    /// Returns diagnostic info for each node that performed an update.
+    pub fn apply_contrastive_update_all(&mut self) -> Vec<crate::graph::node::ContrastiveUpdateInfo> {
+        let mut infos = Vec::new();
+        for node in &mut self.nodes {
+            if node.tier() == Tier::Surface {
+                if let Some(info) = node.apply_contrastive_update() {
+                    infos.push(info);
+                }
+            }
+        }
+        infos
+    }
+
+    /// Set contrastive learning rate on all Surface-tier nodes in the graph.
+    pub fn set_contrastive_lr_all(&mut self, lr: f32) {
+        for node in &mut self.nodes {
+            if node.tier() == Tier::Surface {
+                node.set_contrastive_lr(lr);
+            }
+        }
+    }
+
+    /// Reset contrastive accumulators on all Surface-tier nodes without applying updates.
+    pub fn reset_contrastive_accumulators_all(&mut self) {
+        for node in &mut self.nodes {
+            if node.tier() == Tier::Surface {
+                node.reset_contrastive_accumulators();
+            }
+        }
     }
 }
 

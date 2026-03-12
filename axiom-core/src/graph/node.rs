@@ -3,6 +3,7 @@
 use crate::tiers::Tier;
 use crate::Tensor;
 use serde::{Deserialize, Serialize};
+// AtomicU32 no longer needed — EMA expected_norm removed in Phase 9.
 
 /// Output produced by a compute node after a forward pass.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +44,25 @@ pub trait ComputeNode: Send + Sync {
         _learning_rate: f32,
     ) {
     }
+    /// Error signal weight update — targeted outer product update.
+    ///
+    /// `w_ij += error_lr * modulator * input_i * output_j`
+    ///
+    /// Used for two mechanisms:
+    /// - **Escalation penalty** (modulator < 0): suppresses Surface node weights
+    ///   when the node escalated and Deep resolved confidently.
+    /// - **Cache reinforcement** (modulator > 0): reinforces the producing node
+    ///   when a high-similarity cache hit occurs.
+    ///
+    /// Default implementation is a no-op for nodes without trainable weights.
+    fn error_update(
+        &mut self,
+        _input: &Tensor,
+        _output: &Tensor,
+        _error_lr: f32,
+        _modulator: f32,
+    ) {
+    }
     /// Total number of trainable parameters in this node.
     /// Default is 0 for nodes without trainable weights.
     fn weight_count(&self) -> usize {
@@ -57,6 +77,70 @@ pub trait ComputeNode: Send + Sync {
     fn weight_norm(&self) -> f32 {
         0.0
     }
+    /// Number of times this node has been activated (used for usage-proportional lr).
+    fn activation_count(&self) -> usize {
+        0
+    }
+    /// Increment the activation counter.
+    fn increment_activation(&mut self) {}
+    /// Reset the activation counter (call between passes).
+    fn reset_activation(&mut self) {}
+    /// Accumulate a positive (Surface-resolved) input for contrastive learning.
+    fn accumulate_positive(&mut self, _input: &Tensor) {}
+    /// Accumulate a negative (escalated) input for contrastive learning.
+    fn accumulate_negative(&mut self, _input: &Tensor) {}
+    /// Apply contrastive weight update from accumulated positive/negative examples.
+    ///
+    /// Rank-1 outer product update: `w += lr * outer(contrast, contrast)` where
+    /// `contrast = positive_mean - negative_mean`. Resets accumulators after update.
+    fn apply_contrastive_update(&mut self) -> Option<ContrastiveUpdateInfo> {
+        None
+    }
+    /// Set the contrastive learning rate for this node.
+    fn set_contrastive_lr(&mut self, _lr: f32) {}
+    /// Reset contrastive accumulators without applying any update.
+    fn reset_contrastive_accumulators(&mut self) {}
+    /// Whether this node's weights are frozen (no updates allowed).
+    fn is_frozen(&self) -> bool {
+        false
+    }
+    /// Set the frozen state of this node.
+    fn set_frozen(&mut self, _frozen: bool) {}
+    /// Analytically initialise weights toward a discrimination direction.
+    fn init_analytical(&mut self, _init: &AnalyticalInit, _seed: u64) {}
+}
+
+/// Diagnostic info returned from a contrastive update.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ContrastiveUpdateInfo {
+    /// Node ID that was updated.
+    pub node_id: String,
+    /// Number of positive examples accumulated.
+    pub positive_count: usize,
+    /// Number of negative examples accumulated.
+    pub negative_count: usize,
+    /// L2 norm of the contrast vector (positive_mean - negative_mean).
+    pub contrast_magnitude: f32,
+    /// Weight norm before the update.
+    pub weight_norm_before: f32,
+    /// Weight norm after the update.
+    pub weight_norm_after: f32,
+    /// L2 norm of the positive mean vector.
+    pub positive_mean_norm: f32,
+    /// L2 norm of the negative mean vector.
+    pub negative_mean_norm: f32,
+}
+
+/// Parameters for analytical weight initialisation.
+///
+/// Sets a node's weight matrix principal direction to the discrimination
+/// direction (simple_mean - complex_mean, L2 normalised) plus small noise.
+/// Used to initialise Surface nodes as fixed complexity discriminators.
+pub struct AnalyticalInit {
+    /// Discrimination direction: simple_mean - complex_mean, L2 normalised.
+    pub discrimination_direction: Vec<f32>,
+    /// Scale factor for Xavier noise added to each row (default 0.1).
+    pub noise_scale: f32,
 }
 
 /// A linear transform node with trainable weights: output = ReLU(input * W + bias).
@@ -64,8 +148,9 @@ pub trait ComputeNode: Send + Sync {
 /// Weights are stored as a flattened matrix [input_dim, output_dim].
 /// Supports gradient descent weight updates.
 ///
-/// Surface-tier nodes use magnitude-aware confidence: input is normalised to unit
-/// length for confidence calculation, decoupling confidence from raw vector scale.
+/// Confidence is computed via cosine similarity between the input vector and
+/// the node's learned weight direction (mean of weight matrix columns). This is
+/// magnitude-invariant — it measures directional alignment, not magnitude.
 pub struct LinearNode {
     /// Node identifier.
     pub id: String,
@@ -79,11 +164,27 @@ pub struct LinearNode {
     pub output_dim: usize,
     /// Which tier this node belongs to.
     pub node_tier: Tier,
-    /// Base confidence this node reports (adjusted by output magnitude).
+    /// Base confidence this node reports (adjusted by cosine similarity).
     pub base_confidence: f32,
     /// Learning rate for gradient descent updates.
     pub learning_rate: f32,
+    /// Number of times this node has been activated (for usage-proportional lr).
+    pub activation_count: usize,
+    /// Running sum of Surface-resolved input vectors (contrastive learning).
+    positive_accumulator: Vec<f32>,
+    /// Running sum of escalating input vectors (contrastive learning).
+    negative_accumulator: Vec<f32>,
+    /// Count of positive examples accumulated.
+    positive_count: usize,
+    /// Count of negative examples accumulated.
+    negative_count: usize,
+    /// Learning rate for contrastive updates (default 0.01).
+    pub contrastive_lr: f32,
+    /// When true, all weight update methods become no-ops.
+    /// Used for frozen Surface discriminators with analytical initialisation.
+    pub frozen: bool,
 }
+
 
 impl LinearNode {
     /// Create a new linear node with Xavier-initialised weights.
@@ -121,6 +222,13 @@ impl LinearNode {
             node_tier: tier,
             base_confidence,
             learning_rate: 0.01,
+            activation_count: 0,
+            positive_accumulator: vec![0.0; input_dim],
+            negative_accumulator: vec![0.0; input_dim],
+            positive_count: 0,
+            negative_count: 0,
+            contrastive_lr: 0.01,
+            frozen: false,
         }
     }
 
@@ -145,25 +253,71 @@ impl LinearNode {
             node_tier: tier,
             base_confidence,
             learning_rate: 0.01,
+            activation_count: 0,
+            positive_accumulator: vec![0.0; input_dim],
+            negative_accumulator: vec![0.0; input_dim],
+            positive_count: 0,
+            negative_count: 0,
+            contrastive_lr: 0.01,
+            frozen: false,
         }
     }
 
-    /// Compute confidence ratio from output/input norms.
+    /// Replace weights with analytical initialisation aligned to discrimination direction.
     ///
-    /// Surface nodes use absolute output_norm — larger input magnitude produces
-    /// larger output, driving higher confidence. This is how the position-weighted
-    /// encoder's magnitude signal reaches the tier decision.
-    ///
-    /// Non-Surface nodes use output_norm / input_norm — scale-invariant ratio
-    /// that reflects how well the node's weights match the input direction.
-    fn compute_ratio(output_norm: f32, input_norm: f32, is_surface: bool) -> f32 {
-        if is_surface {
-            output_norm.min(1.0)
-        } else if input_norm > 0.0 {
-            (output_norm / input_norm).min(1.0)
-        } else {
-            0.5
+    /// Each row of the weight matrix is set to `discrimination_direction + noise`.
+    /// The noise is Xavier-scaled by `init.noise_scale` and seeded deterministically
+    /// from `(node_id_hash XOR seed XOR row_index)` so each node and row gets
+    /// unique noise while all point in the same general direction.
+    pub fn init_analytical(&mut self, init: &AnalyticalInit, seed: u64) {
+        let id_hash: u64 = self.id.bytes().fold(5381u64, |h, b| h.wrapping_mul(33).wrapping_add(b as u64));
+        let xavier_scale = 1.0 / (self.input_dim as f32).sqrt();
+        let noise_scale = init.noise_scale * xavier_scale;
+
+        for i in 0..self.input_dim {
+            let row_seed = id_hash ^ seed ^ (i as u64);
+            for j in 0..self.output_dim {
+                let idx = i * self.output_dim + j;
+                if idx < self.weights.data.len() {
+                    // Deterministic noise from (row_seed XOR column)
+                    let mut s = (row_seed ^ (j as u64)) as u32;
+                    s ^= s << 13;
+                    s ^= s >> 17;
+                    s ^= s << 5;
+                    let noise = (s as f32 / u32::MAX as f32) * 2.0 - 1.0;
+
+                    let dir_val = if i < init.discrimination_direction.len() {
+                        init.discrimination_direction[i]
+                    } else {
+                        0.0
+                    };
+                    self.weights.data[idx] = dir_val + noise * noise_scale;
+                }
+            }
         }
+    }
+
+    /// Compute the mean weight direction vector (mean of weight matrix columns).
+    ///
+    /// The weight matrix has shape [input_dim, output_dim]. Each column j represents
+    /// how input dimensions contribute to output j. The mean across all columns gives
+    /// a single vector of length input_dim representing the node's overall learned
+    /// direction. Cosine similarity between input and this direction is the
+    /// magnitude-invariant confidence signal.
+    pub fn weight_direction(&self) -> Vec<f32> {
+        let mut direction = vec![0.0f32; self.input_dim];
+        let inv_out = 1.0 / self.output_dim.max(1) as f32;
+        for i in 0..self.input_dim {
+            let mut sum = 0.0f32;
+            for j in 0..self.output_dim {
+                let idx = i * self.output_dim + j;
+                if idx < self.weights.data.len() {
+                    sum += self.weights.data[idx];
+                }
+            }
+            direction[i] = sum * inv_out;
+        }
+        direction
     }
 }
 
@@ -198,10 +352,17 @@ impl ComputeNode for LinearNode {
 
         let output = Tensor::new(output_data, vec![self.output_dim]);
 
-        // Confidence based on output magnitude relative to input
-        let output_norm = output.norm();
-        let ratio = Self::compute_ratio(output_norm, input_norm, self.node_tier == Tier::Surface);
-        let confidence = (self.base_confidence * 0.7 + ratio * 0.3).clamp(0.0, 1.0);
+        // Cosine similarity between input and weight direction (magnitude-invariant)
+        let weight_dir = self.weight_direction();
+        let epsilon = 1e-8f32;
+        let dot: f32 = input_slice.iter().zip(weight_dir.iter()).map(|(a, b)| a * b).sum();
+        let dir_norm: f32 = weight_dir.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let cosine_sim = if input_norm > epsilon && dir_norm > epsilon {
+            (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
+        let confidence = (self.base_confidence * 0.7 + cosine_sim * 0.3).clamp(0.0, 1.0);
 
         let compute_cost = (self.input_dim * self.output_dim) as f32 / 1000.0;
 
@@ -224,6 +385,9 @@ impl ComputeNode for LinearNode {
         signal: f32,
         learning_rate: f32,
     ) {
+        if self.frozen {
+            return;
+        }
         let lr = if learning_rate > 0.0 {
             learning_rate
         } else {
@@ -254,6 +418,30 @@ impl ComputeNode for LinearNode {
         }
     }
 
+    fn error_update(
+        &mut self,
+        input: &Tensor,
+        output: &Tensor,
+        error_lr: f32,
+        modulator: f32,
+    ) {
+        if self.frozen {
+            return;
+        }
+        // w_ij += error_lr * modulator * input_i * output_j
+        let in_len = self.input_dim.min(input.data.len());
+        let out_len = self.output_dim.min(output.data.len());
+        for i in 0..in_len {
+            for j in 0..out_len {
+                let idx = i * self.output_dim + j;
+                if idx < self.weights.data.len() {
+                    self.weights.data[idx] +=
+                        error_lr * modulator * input.data[i] * output.data[j];
+                }
+            }
+        }
+    }
+
     fn weight_count(&self) -> usize {
         self.weights.data.len() + self.bias.data.len()
     }
@@ -264,6 +452,126 @@ impl ComputeNode for LinearNode {
 
     fn weight_norm(&self) -> f32 {
         self.weights.norm()
+    }
+
+    fn activation_count(&self) -> usize {
+        self.activation_count
+    }
+
+    fn increment_activation(&mut self) {
+        self.activation_count += 1;
+    }
+
+    fn reset_activation(&mut self) {
+        self.activation_count = 0;
+    }
+
+    fn accumulate_positive(&mut self, input: &Tensor) {
+        if self.frozen {
+            return;
+        }
+        let len = self.input_dim.min(input.data.len());
+        for i in 0..len {
+            self.positive_accumulator[i] += input.data[i];
+        }
+        self.positive_count += 1;
+    }
+
+    fn accumulate_negative(&mut self, input: &Tensor) {
+        if self.frozen {
+            return;
+        }
+        let len = self.input_dim.min(input.data.len());
+        for i in 0..len {
+            self.negative_accumulator[i] += input.data[i];
+        }
+        self.negative_count += 1;
+    }
+
+    fn apply_contrastive_update(&mut self) -> Option<ContrastiveUpdateInfo> {
+        if self.frozen {
+            return None;
+        }
+        if self.positive_count == 0 || self.negative_count == 0 {
+            return None;
+        }
+
+        let weight_norm_before = self.weights.norm();
+        let pos_count = self.positive_count as f32;
+        let neg_count = self.negative_count as f32;
+        let pos_count_saved = self.positive_count;
+        let neg_count_saved = self.negative_count;
+
+        // contrast = positive_mean - negative_mean
+        let mut contrast = vec![0.0f32; self.input_dim];
+        let mut pos_mean_sq_sum = 0.0f32;
+        let mut neg_mean_sq_sum = 0.0f32;
+        for i in 0..self.input_dim {
+            let pos_mean = self.positive_accumulator[i] / pos_count;
+            let neg_mean = self.negative_accumulator[i] / neg_count;
+            contrast[i] = pos_mean - neg_mean;
+            pos_mean_sq_sum += pos_mean * pos_mean;
+            neg_mean_sq_sum += neg_mean * neg_mean;
+        }
+        let positive_mean_norm = pos_mean_sq_sum.sqrt();
+        let negative_mean_norm = neg_mean_sq_sum.sqrt();
+
+        // Contrast magnitude (L2 norm)
+        let contrast_magnitude = contrast.iter().map(|c| c * c).sum::<f32>().sqrt();
+
+        // w += contrastive_lr * outer_product(contrast, contrast)
+        // outer_product: contrast[i] * contrast[j] for weight[i][j]
+        for i in 0..self.input_dim {
+            for j in 0..self.output_dim {
+                let idx = i * self.output_dim + j;
+                if idx < self.weights.data.len() {
+                    let cj = if j < contrast.len() { contrast[j] } else { 0.0 };
+                    self.weights.data[idx] += self.contrastive_lr * contrast[i] * cj;
+                }
+            }
+        }
+
+        let weight_norm_after = self.weights.norm();
+
+        // Reset accumulators
+        self.positive_accumulator.fill(0.0);
+        self.negative_accumulator.fill(0.0);
+        self.positive_count = 0;
+        self.negative_count = 0;
+
+        Some(ContrastiveUpdateInfo {
+            node_id: self.id.clone(),
+            positive_count: pos_count_saved,
+            negative_count: neg_count_saved,
+            contrast_magnitude,
+            weight_norm_before,
+            weight_norm_after,
+            positive_mean_norm,
+            negative_mean_norm,
+        })
+    }
+
+    fn set_contrastive_lr(&mut self, lr: f32) {
+        self.contrastive_lr = lr;
+    }
+
+    fn reset_contrastive_accumulators(&mut self) {
+        self.positive_accumulator.fill(0.0);
+        self.negative_accumulator.fill(0.0);
+        self.positive_count = 0;
+        self.negative_count = 0;
+    }
+
+    fn is_frozen(&self) -> bool {
+        self.frozen
+    }
+
+    fn set_frozen(&mut self, frozen: bool) {
+        self.frozen = frozen;
+    }
+
+    fn init_analytical(&mut self, init: &AnalyticalInit, seed: u64) {
+        LinearNode::init_analytical(self, init, seed);
     }
 }
 
@@ -440,6 +748,46 @@ mod tests {
     }
 
     #[test]
+    fn test_error_update_penalty() {
+        let mut node = LinearNode::new("err_pen", 2, 2, Tier::Surface, 0.9);
+        let w_before: Vec<f32> = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        // Penalty: modulator = -(1 - 0.7) = -0.3, error_lr = 0.0005
+        node.error_update(&input, &output, 0.0005, -0.3);
+        // Each weight should decrease by 0.0005 * 0.3 * 1 * 1 = 0.00015
+        for (before, after) in w_before.iter().zip(node.weights.data.iter()) {
+            let expected = before - 0.00015;
+            assert!(
+                (after - expected).abs() < 1e-7,
+                "Error penalty: expected {:.6}, got {:.6}",
+                expected,
+                after
+            );
+        }
+    }
+
+    #[test]
+    fn test_error_update_reinforcement() {
+        let mut node = LinearNode::new("err_rein", 2, 2, Tier::Surface, 0.9);
+        let w_before: Vec<f32> = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        // Reinforcement: modulator = 0.96 (similarity), error_lr = 0.0005
+        node.error_update(&input, &output, 0.0005, 0.96);
+        // Each weight should increase by 0.0005 * 0.96 * 1 * 1 = 0.00048
+        for (before, after) in w_before.iter().zip(node.weights.data.iter()) {
+            let expected = before + 0.00048;
+            assert!(
+                (after - expected).abs() < 1e-7,
+                "Error reinforcement: expected {:.6}, got {:.6}",
+                expected,
+                after
+            );
+        }
+    }
+
+    #[test]
     fn test_reasoning_magnitude_dependent() {
         // Reasoning nodes should NOT normalise — confidence depends on magnitude
         let node = LinearNode::new("reasoning", 4, 4, Tier::Reasoning, 0.72);
@@ -451,5 +799,210 @@ mod tests {
         // (we just verify both are valid, not necessarily different)
         assert!(out_small.confidence >= 0.0 && out_small.confidence <= 1.0);
         assert!(out_large.confidence >= 0.0 && out_large.confidence <= 1.0);
+    }
+
+    #[test]
+    fn test_contrastive_accumulate_positive() {
+        let mut node = LinearNode::new("pos_acc", 4, 4, Tier::Surface, 0.9);
+        let input1 = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+        let input2 = Tensor::from_vec(vec![0.5, 1.5, 2.5, 3.5]);
+        node.accumulate_positive(&input1);
+        node.accumulate_positive(&input2);
+        assert_eq!(node.positive_count, 2);
+        // Accumulator should be element-wise sum
+        assert!((node.positive_accumulator[0] - 1.5).abs() < 1e-6);
+        assert!((node.positive_accumulator[1] - 3.5).abs() < 1e-6);
+        assert!((node.positive_accumulator[2] - 5.5).abs() < 1e-6);
+        assert!((node.positive_accumulator[3] - 7.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_contrastive_accumulate_negative() {
+        let mut node = LinearNode::new("neg_acc", 4, 4, Tier::Surface, 0.9);
+        let input1 = Tensor::from_vec(vec![0.1, 0.2, 0.3, 0.4]);
+        let input2 = Tensor::from_vec(vec![0.3, 0.4, 0.5, 0.6]);
+        node.accumulate_negative(&input1);
+        node.accumulate_negative(&input2);
+        assert_eq!(node.negative_count, 2);
+        assert!((node.negative_accumulator[0] - 0.4).abs() < 1e-6);
+        assert!((node.negative_accumulator[1] - 0.6).abs() < 1e-6);
+        assert!((node.negative_accumulator[2] - 0.8).abs() < 1e-6);
+        assert!((node.negative_accumulator[3] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_contrastive_update_formula() {
+        // Verify outer product direction: contrast = pos_mean - neg_mean
+        // w += lr * contrast_i * contrast_j
+        let mut node = LinearNode::new("contrast", 2, 2, Tier::Surface, 0.9);
+        node.contrastive_lr = 1.0; // lr=1 for easy verification
+        let w_before: Vec<f32> = node.weights.data.clone();
+
+        // Positive mean will be [2.0, 4.0], negative mean will be [1.0, 1.0]
+        // contrast = [1.0, 3.0]
+        node.accumulate_positive(&Tensor::from_vec(vec![2.0, 4.0]));
+        node.accumulate_negative(&Tensor::from_vec(vec![1.0, 1.0]));
+
+        let info = node.apply_contrastive_update().unwrap();
+        assert_eq!(info.positive_count, 1);
+        assert_eq!(info.negative_count, 1);
+        // contrast_magnitude = sqrt(1^2 + 3^2) = sqrt(10) ≈ 3.162
+        assert!((info.contrast_magnitude - 10.0f32.sqrt()).abs() < 1e-5);
+
+        // outer_product([1, 3], [1, 3]) = [[1, 3], [3, 9]]
+        // w[0][0] += 1*1 = 1, w[0][1] += 1*3 = 3
+        // w[1][0] += 3*1 = 3, w[1][1] += 3*3 = 9
+        assert!((node.weights.data[0] - (w_before[0] + 1.0)).abs() < 1e-6, "w[0][0]");
+        assert!((node.weights.data[1] - (w_before[1] + 3.0)).abs() < 1e-6, "w[0][1]");
+        assert!((node.weights.data[2] - (w_before[2] + 3.0)).abs() < 1e-6, "w[1][0]");
+        assert!((node.weights.data[3] - (w_before[3] + 9.0)).abs() < 1e-6, "w[1][1]");
+    }
+
+    #[test]
+    fn test_contrastive_reset_after_update() {
+        let mut node = LinearNode::new("reset", 2, 2, Tier::Surface, 0.9);
+        node.accumulate_positive(&Tensor::from_vec(vec![1.0, 2.0]));
+        node.accumulate_negative(&Tensor::from_vec(vec![0.5, 0.5]));
+        let info = node.apply_contrastive_update();
+        assert!(info.is_some());
+        // After update, accumulators and counts should be reset
+        assert_eq!(node.positive_count, 0);
+        assert_eq!(node.negative_count, 0);
+        assert!(node.positive_accumulator.iter().all(|&v| v == 0.0));
+        assert!(node.negative_accumulator.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn test_contrastive_no_update_without_both_populations() {
+        let mut node = LinearNode::new("noop", 2, 2, Tier::Surface, 0.9);
+        // Only positive — should return None
+        node.accumulate_positive(&Tensor::from_vec(vec![1.0, 2.0]));
+        assert!(node.apply_contrastive_update().is_none());
+        // Only negative — should return None
+        let mut node2 = LinearNode::new("noop2", 2, 2, Tier::Surface, 0.9);
+        node2.accumulate_negative(&Tensor::from_vec(vec![1.0, 2.0]));
+        assert!(node2.apply_contrastive_update().is_none());
+    }
+
+    #[test]
+    fn test_contrastive_default_noop_on_trait() {
+        // AggregateNode should have no-op implementations
+        let mut node = AggregateNode::new("agg_noop", 2, Tier::Surface);
+        let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+        node.accumulate_positive(&input);
+        node.accumulate_negative(&input);
+        assert!(node.apply_contrastive_update().is_none());
+    }
+
+    #[test]
+    fn test_init_analytical_sets_weight_rows() {
+        let mut node = LinearNode::new("analytic", 4, 2, Tier::Surface, 0.9);
+        let direction = vec![0.6, 0.0, -0.8, 0.0]; // unit vector
+        let init = AnalyticalInit {
+            discrimination_direction: direction.clone(),
+            noise_scale: 0.0, // zero noise → weights exactly equal direction
+        };
+        node.init_analytical(&init, 42);
+
+        // Each row should be exactly the direction (noise_scale=0)
+        for i in 0..4 {
+            for j in 0..2 {
+                let idx = i * 2 + j;
+                assert!(
+                    (node.weights.data[idx] - direction[i]).abs() < 1e-6,
+                    "Weight[{}][{}] should be {:.4}, got {:.4}",
+                    i, j, direction[i], node.weights.data[idx]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_init_analytical_with_noise() {
+        let mut node = LinearNode::new("noisy", 4, 2, Tier::Surface, 0.9);
+        let direction = vec![0.6, 0.0, -0.8, 0.0];
+        let init = AnalyticalInit {
+            discrimination_direction: direction.clone(),
+            noise_scale: 0.1,
+        };
+        node.init_analytical(&init, 42);
+
+        // Weights should be close to direction but not exact (noise added)
+        for i in 0..4 {
+            for j in 0..2 {
+                let idx = i * 2 + j;
+                let diff = (node.weights.data[idx] - direction[i]).abs();
+                // With noise_scale=0.1 and xavier_scale=1/sqrt(4)=0.5, max noise ~ 0.05
+                assert!(
+                    diff < 0.1,
+                    "Weight[{}][{}] = {:.4}, direction = {:.4}, diff = {:.4}",
+                    i, j, node.weights.data[idx], direction[i], diff
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_frozen_node_ignores_hebbian() {
+        let mut node = LinearNode::new("frozen_h", 4, 2, Tier::Surface, 0.9);
+        node.frozen = true;
+        let w_before = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        node.hebbian_update(&input, &output, 1.0, 0.1);
+        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+    }
+
+    #[test]
+    fn test_frozen_node_ignores_error_update() {
+        let mut node = LinearNode::new("frozen_e", 4, 2, Tier::Surface, 0.9);
+        node.frozen = true;
+        let w_before = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        node.error_update(&input, &output, 0.001, 0.5);
+        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+    }
+
+    #[test]
+    fn test_frozen_node_ignores_contrastive() {
+        let mut node = LinearNode::new("frozen_c", 4, 2, Tier::Surface, 0.9);
+        node.frozen = true;
+        let w_before = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
+        node.accumulate_positive(&input);
+        node.accumulate_negative(&input);
+        // Accumulation should be no-op when frozen
+        assert_eq!(node.positive_count, 0);
+        assert_eq!(node.negative_count, 0);
+        let info = node.apply_contrastive_update();
+        assert!(info.is_none(), "Frozen node should not produce contrastive update");
+        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+    }
+
+    #[test]
+    fn test_frozen_via_trait() {
+        let mut node = LinearNode::new("trait_freeze", 4, 2, Tier::Surface, 0.9);
+        assert!(!node.is_frozen());
+        node.set_frozen(true);
+        assert!(node.is_frozen());
+        // Weight update via trait should be no-op
+        let w_before = node.weights.data.clone();
+        let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
+        let output = Tensor::from_vec(vec![1.0, 1.0]);
+        node.hebbian_update(&input, &output, 1.0, 0.1);
+        assert_eq!(node.weights.data, w_before);
+    }
+
+    #[test]
+    fn test_discrimination_direction_unit_normalised() {
+        // Verify the direction passed to init_analytical should be unit normalised
+        let direction = vec![0.6, 0.0, -0.8, 0.0];
+        let norm: f32 = direction.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!(
+            (norm - 1.0).abs() < 1e-6,
+            "Test direction must be unit normalised, got norm={}",
+            norm
+        );
     }
 }

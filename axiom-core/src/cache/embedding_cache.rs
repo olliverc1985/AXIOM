@@ -1,5 +1,6 @@
 //! Content-addressable embedding cache with cosine similarity lookup and LRU eviction.
 
+use crate::tiers::Tier;
 use crate::Tensor;
 
 /// A single cache entry storing key/value tensors and access metadata.
@@ -13,6 +14,10 @@ pub struct CacheEntry {
     pub hit_count: u64,
     /// Monotonic access counter (higher = more recently accessed).
     pub last_accessed: u64,
+    /// ID of the compute node that produced this entry's value.
+    pub producer_node_id: Option<String>,
+    /// Which tier resolved this entry.
+    pub resolved_tier: Option<Tier>,
 }
 
 /// Content-addressable embedding cache.
@@ -53,8 +58,8 @@ impl EmbeddingCache {
 
     /// Look up the most similar cached entry to the input key.
     ///
-    /// Returns `Some((value, similarity))` if a match above threshold is found.
-    fn lookup(&mut self, key: &Tensor) -> Option<(Tensor, f32)> {
+    /// Returns `Some((value, similarity, producer_node_id))` if a match above threshold is found.
+    fn lookup(&mut self, key: &Tensor) -> Option<(Tensor, f32, Option<String>)> {
         let mut best_sim = -1.0_f32;
         let mut best_idx: Option<usize> = None;
 
@@ -74,7 +79,11 @@ impl EmbeddingCache {
                 self.access_counter += 1;
                 self.entries[idx].hit_count += 1;
                 self.entries[idx].last_accessed = self.access_counter;
-                return Some((self.entries[idx].value.clone(), best_sim));
+                return Some((
+                    self.entries[idx].value.clone(),
+                    best_sim,
+                    self.entries[idx].producer_node_id.clone(),
+                ));
             }
         }
 
@@ -82,7 +91,7 @@ impl EmbeddingCache {
     }
 
     /// Insert a new entry, evicting the LRU entry if at capacity.
-    fn insert(&mut self, key: Tensor, value: Tensor) {
+    fn insert(&mut self, key: Tensor, value: Tensor, producer_node_id: Option<String>, resolved_tier: Option<Tier>) {
         if self.entries.len() >= self.max_entries {
             // Evict least recently used
             let lru_idx = self
@@ -101,6 +110,8 @@ impl EmbeddingCache {
             value,
             hit_count: 0,
             last_accessed: self.access_counter,
+            producer_node_id,
+            resolved_tier,
         });
     }
 
@@ -114,14 +125,14 @@ impl EmbeddingCache {
     ) -> (Tensor, bool) {
         self.total_lookups += 1;
 
-        if let Some((cached_value, _similarity)) = self.lookup(input) {
+        if let Some((cached_value, _similarity, _producer)) = self.lookup(input) {
             self.total_hits += 1;
             return (cached_value, true);
         }
 
         // Cache miss — compute, store, and return
         let result = compute_fn(input);
-        self.insert(input.clone(), result.clone());
+        self.insert(input.clone(), result.clone(), None, None);
         (result, false)
     }
 
@@ -154,13 +165,95 @@ impl EmbeddingCache {
     /// Lookup only — returns cached value if found, without computing.
     ///
     /// Does not update total_lookups/total_hits counters (caller manages those).
-    pub fn lookup_only(&mut self, key: &Tensor) -> Option<(Tensor, f32)> {
+    /// Returns `Some((value, similarity, producer_node_id))`.
+    pub fn lookup_only(&mut self, key: &Tensor) -> Option<(Tensor, f32, Option<String>)> {
         self.lookup(key)
     }
 
-    /// Insert a key/value pair directly into the cache.
-    pub fn insert_direct(&mut self, key: Tensor, value: Tensor) {
-        self.insert(key, value);
+    /// Insert a key/value pair directly into the cache with optional producer node ID and tier.
+    pub fn insert_direct(
+        &mut self,
+        key: Tensor,
+        value: Tensor,
+        producer_node_id: Option<String>,
+        resolved_tier: Option<Tier>,
+    ) {
+        self.insert(key, value, producer_node_id, resolved_tier);
+    }
+
+    /// Find the best-matching cache entry with cosine similarity above `threshold`
+    /// that was resolved at the given tier. Does not update access counters.
+    ///
+    /// Returns `(similarity, producer_node_id)` if found.
+    pub fn find_similar_at_tier(
+        &self,
+        key: &Tensor,
+        threshold: f32,
+        tier: Tier,
+    ) -> Option<(f32, Option<String>)> {
+        let mut best_sim = -1.0_f32;
+        let mut best_idx: Option<usize> = None;
+
+        for (i, entry) in self.entries.iter().enumerate() {
+            if entry.key.data.len() != key.data.len() {
+                continue;
+            }
+            if entry.resolved_tier != Some(tier) {
+                continue;
+            }
+            let sim = key.cosine_similarity(&entry.key);
+            if sim > best_sim {
+                best_sim = sim;
+                best_idx = Some(i);
+            }
+        }
+
+        if best_sim >= threshold {
+            best_idx.map(|idx| (best_sim, self.entries[idx].producer_node_id.clone()))
+        } else {
+            None
+        }
+    }
+
+    /// Find the highest cosine similarity to any cached entry at the given tier,
+    /// regardless of threshold. Returns `(best_similarity, resolved_tier_of_nearest)`
+    /// across ALL entries (not just the target tier) for diagnostic purposes.
+    ///
+    /// Returns `None` if the cache is empty.
+    pub fn best_similarity_diagnostic(
+        &self,
+        key: &Tensor,
+        target_tier: Tier,
+    ) -> Option<(f32, Option<Tier>)> {
+        if self.entries.is_empty() {
+            return None;
+        }
+
+        let mut best_sim_at_tier = -1.0_f32;
+        let mut best_sim_any = -1.0_f32;
+        let mut best_any_tier: Option<Tier> = None;
+
+        for entry in &self.entries {
+            if entry.key.data.len() != key.data.len() {
+                continue;
+            }
+            let sim = key.cosine_similarity(&entry.key);
+            if sim > best_sim_any {
+                best_sim_any = sim;
+                best_any_tier = entry.resolved_tier;
+            }
+            if entry.resolved_tier == Some(target_tier) && sim > best_sim_at_tier {
+                best_sim_at_tier = sim;
+            }
+        }
+
+        // Return best sim against Surface entries, with nearest-overall tier for context
+        if best_sim_at_tier > -1.0 {
+            Some((best_sim_at_tier, best_any_tier))
+        } else {
+            // No Surface entries in cache at all — return overall best
+            Some((best_sim_any, best_any_tier))
+        }
     }
 }
 

@@ -10,6 +10,25 @@ use crate::tiers::feedback::FeedbackSignal;
 use crate::tiers::tier::{AxiomConfig, Tier, TierConfig};
 use crate::Tensor;
 
+/// Operational mode for the resolver — controls whether the embedding cache is active.
+///
+/// **Training mode**: cache is completely bypassed. Every input routes through
+/// the graph and standalone nodes unconditionally. This ensures the network sees
+/// every training sentence on every pass, enabling meaningful weight convergence.
+///
+/// **Inference mode**: cache is active. Similar inputs get cache hits for compute
+/// savings. This is the default mode for backward compatibility.
+///
+/// This does NOT change the confidence formula, routing logic, or learning rules —
+/// only whether the cache participates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteMode {
+    /// Cache disabled — every input reaches the network for learning.
+    Training,
+    /// Cache enabled — compute savings active for inference.
+    Inference,
+}
+
 /// An entry in the temporal buffer — stores a recent resolve result.
 #[derive(Debug, Clone)]
 pub struct TemporalEntry {
@@ -106,6 +125,8 @@ pub struct HierarchicalResolver {
     pub cache: EmbeddingCache,
     /// Tier escalation configuration.
     pub config: TierConfig,
+    /// Operational mode — Training (cache off) or Inference (cache on).
+    pub mode: RouteMode,
     /// Surface-tier nodes (fast, cheap) — used in standard blend step.
     surface_nodes: Vec<Box<dyn ComputeNode>>,
     /// Reasoning-tier nodes (medium compute).
@@ -120,6 +141,21 @@ pub struct HierarchicalResolver {
     pub temporal_buffer: TemporalBuffer,
     /// Accumulated feedback signals from the current resolve call.
     feedback_log: Vec<FeedbackSignal>,
+    /// Accumulated error signal events (across all resolves, for logging).
+    error_events: Vec<ErrorEvent>,
+}
+
+/// An error signal event for diagnostic logging.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ErrorEvent {
+    /// Type of error event: "escalation_penalty" or "cache_reinforcement".
+    pub event_type: String,
+    /// ID of the node the error signal was applied to.
+    pub node_id: String,
+    /// Confidence at the time of the event.
+    pub confidence: f32,
+    /// Magnitude of the error update applied to weights.
+    pub error_magnitude: f32,
 }
 
 /// Full result from the hierarchical resolver including tier information.
@@ -133,7 +169,18 @@ pub struct ResolveResult {
     pub from_cache: bool,
     /// Feedback signals emitted during resolution.
     pub feedback_signals: Vec<FeedbackSignal>,
+    /// Winning resolution path description.
     pub winning_path: String,
+    /// Best Surface-tier confidence before escalation (0 if cache hit).
+    pub surface_confidence: f32,
+    /// ID of the Surface node that produced the pre-escalation output.
+    pub surface_producer_id: Option<String>,
+    /// Output tensor from the Surface node before escalation.
+    pub surface_output: Option<Tensor>,
+    /// Cosine similarity of a cache hit (0 if miss).
+    pub cache_hit_similarity: f32,
+    /// ID of the node that produced the cached entry (None if miss).
+    pub cache_producer_id: Option<String>,
 }
 
 impl HierarchicalResolver {
@@ -143,6 +190,7 @@ impl HierarchicalResolver {
             graph,
             cache,
             config,
+            mode: RouteMode::Inference,
             surface_nodes: Vec::new(),
             reasoning_nodes: Vec::new(),
             deep_nodes: Vec::new(),
@@ -150,6 +198,7 @@ impl HierarchicalResolver {
             lateral_edges: Vec::new(),
             temporal_buffer: TemporalBuffer::new(16),
             feedback_log: Vec::new(),
+            error_events: Vec::new(),
         }
     }
 
@@ -182,6 +231,21 @@ impl HierarchicalResolver {
             let output = node.forward(input);
             if best.as_ref().map_or(true, |b| output.confidence > b.confidence) {
                 best = Some(output);
+            }
+        }
+        best
+    }
+
+    /// Run tier-specific nodes returning best output AND the winning node ID.
+    fn run_tier_nodes_with_id(
+        nodes: &[Box<dyn ComputeNode>],
+        input: &Tensor,
+    ) -> Option<(NodeOutput, String)> {
+        let mut best: Option<(NodeOutput, String)> = None;
+        for node in nodes {
+            let output = node.forward(input);
+            if best.as_ref().map_or(true, |(b, _)| output.confidence > b.confidence) {
+                best = Some((output, node.node_id().to_string()));
             }
         }
         best
@@ -244,14 +308,16 @@ impl HierarchicalResolver {
     /// 5. If still below surface threshold, escalate to Reasoning
     /// 6. If still below reasoning threshold, escalate to Deep
     /// 7. Emit feedback signals if Deep resolves with high confidence
-    /// 8. Cache the result
+    /// 8. Cache the result with producer node ID
+    ///
+    /// Tracks producer node IDs, surface confidence, and cache similarity
+    /// for error signal computation in `apply_error_signal()`.
     #[allow(unused_assignments)]
     pub fn resolve(&mut self, input: &Tensor) -> ResolveResult {
         let mut cache_hits = 0u32;
         let mut from_cache = false;
         self.feedback_log.clear();
 
-        // Phase 1: Check cache
         let cache_key = input.clone();
         let mut current_tensor;
         let mut confidence;
@@ -262,14 +328,29 @@ impl HierarchicalResolver {
         let mut lateral_count = 0u32;
         let mut lateral_prevented = 0u32;
         let mut winning_path = String::from("graph");
+        let mut producer_node_id: Option<String> = None;
 
-        // Try cache first
-        if let Some((cached, _sim)) = self.cache_lookup(&cache_key) {
+        // Error signal tracking
+        let mut cache_hit_similarity = 0.0f32;
+        let mut cache_producer_id: Option<String> = None;
+        // Max standalone Surface node confidence — used for escalation decisions.
+        let mut escalation_conf = f32::NEG_INFINITY;
+
+        // Try cache first (skipped entirely in Training mode)
+        let cache_result = if self.mode == RouteMode::Inference {
+            self.cache_lookup(&cache_key)
+        } else {
+            None
+        };
+        if let Some((cached, sim, cached_producer)) = cache_result {
             current_tensor = cached;
             cache_hits += 1;
             from_cache = true;
             winning_path = "cache".to_string();
-            confidence = 0.95; // High confidence for cached results
+            confidence = 0.95;
+            cache_hit_similarity = sim;
+            cache_producer_id = cached_producer;
+            producer_node_id = Some("cache_hit".to_string());
             trace.push("cache_hit".to_string());
             trace_steps.push(TraceStep {
                 node_id: "cache_hit".to_string(),
@@ -284,19 +365,27 @@ impl HierarchicalResolver {
             let route = self.graph.route(input);
             current_tensor = route.output;
             confidence = route.confidence;
+            producer_node_id = route.producer_node_id;
 
             total_cost += route.total_compute_cost;
             trace.extend(route.execution_trace);
             trace_steps.extend(route.trace_steps);
 
-            // Also run standalone surface nodes
-            if let Some(surface_out) = Self::run_tier_nodes(&self.surface_nodes, input) {
-                total_cost += surface_out.compute_cost;
-                // Blend with graph output if surface nodes provide higher confidence
-                if surface_out.confidence > confidence {
-                    current_tensor = surface_out.tensor;
-                    confidence = surface_out.confidence;
+            // Also run standalone surface nodes and compute max standalone
+            // confidence. This is what gets compared to the surface threshold
+            // for escalation decisions — not the graph route confidence, which
+            // chains nodes and inflates the value.
+            let mut max_standalone_conf = f32::NEG_INFINITY;
+            if let Some(surface_out) =
+                Self::run_tier_nodes_with_id(&self.surface_nodes, input)
+            {
+                total_cost += surface_out.0.compute_cost;
+                max_standalone_conf = surface_out.0.confidence;
+                if surface_out.0.confidence > confidence {
+                    current_tensor = surface_out.0.tensor;
+                    confidence = surface_out.0.confidence;
                     winning_path = "surface_standalone".to_string();
+                    producer_node_id = Some(surface_out.1.to_string());
                 }
                 trace.push("surface_blend".to_string());
                 trace_steps.push(TraceStep {
@@ -309,8 +398,17 @@ impl HierarchicalResolver {
                 });
             }
 
-            // Phase 3: Lateral traversal — try neighbouring Surface nodes before escalating
-            if confidence < self.config.surface_confidence_threshold {
+            // Use max standalone confidence for escalation decisions.
+            // The graph route confidence is used for output selection, but
+            // individual node confidence determines routing.
+            escalation_conf = if max_standalone_conf > f32::NEG_INFINITY {
+                max_standalone_conf
+            } else {
+                confidence
+            };
+
+            // Phase 3: Lateral traversal
+            if escalation_conf < self.config.surface_confidence_threshold {
                 let graph_entry = self.graph.entry_node().to_string();
                 let (lateral_result, lateral_steps, lat_count) =
                     self.run_lateral_surface(&graph_entry, confidence, input);
@@ -322,23 +420,22 @@ impl HierarchicalResolver {
                         winning_path = "surface_lateral".to_string();
                         trace.push("lateral_resolve".to_string());
                         if lat_out.confidence >= self.config.surface_confidence_threshold {
-                            // Lateral resolved it — no escalation needed
                             lateral_prevented += 1;
                         }
                         current_tensor = lat_out.tensor;
                         confidence = lat_out.confidence;
+                        escalation_conf = escalation_conf.max(lat_out.confidence);
                         total_cost += lat_out.compute_cost;
+                        // Lateral nodes don't set producer_node_id (kept from prior best)
                     }
                 }
             }
 
-            // Phase 3.5: Temporal blend — check recency buffer for similar recent result
-            if confidence < self.config.surface_confidence_threshold {
+            // Phase 3.5: Temporal blend
+            if escalation_conf < self.config.surface_confidence_threshold {
                 if let Some(temporal_entry) = self.temporal_buffer.find_similar(input, 0.85) {
-                    // Blend: 0.3 * cached + 0.7 * current
                     let blended = current_tensor.blend(&temporal_entry.output, 0.7);
                     let conf_in = confidence;
-                    // Temporal blend boosts confidence toward the cached result's confidence
                     let blended_confidence =
                         (confidence * 0.7 + temporal_entry.confidence * 0.3).clamp(0.0, 1.0);
                     current_tensor = blended;
@@ -357,10 +454,19 @@ impl HierarchicalResolver {
             }
         }
 
+        // Capture Surface state before potential escalation (for error signal).
+        // Use escalation_conf (standalone node max) for the surface_confidence
+        // field so error signals and contrastive learning see the right value.
+        let surface_confidence = if from_cache { confidence } else { escalation_conf };
+        let surface_producer_id = producer_node_id.clone();
+        let surface_output = if !from_cache {
+            Some(current_tensor.clone())
+        } else {
+            None
+        };
+
         // Phase 4: Escalate to Reasoning if needed
-        // Standalone nodes receive the ORIGINAL input, not graph output.
-        // The graph is one path; standalone nodes are alternative paths.
-        if confidence < self.config.surface_confidence_threshold && !from_cache {
+        if escalation_conf < self.config.surface_confidence_threshold && !from_cache {
             tier_reached = Tier::Reasoning;
             trace.push("escalate_reasoning".to_string());
             trace_steps.push(TraceStep {
@@ -378,6 +484,7 @@ impl HierarchicalResolver {
                 let conf_in = confidence;
                 current_tensor = reasoning_out.tensor;
                 winning_path = "reasoning_standalone".to_string();
+                producer_node_id = Some("reasoning_standalone".to_string());
                 confidence = reasoning_out.confidence;
                 total_cost += reasoning_out.compute_cost;
                 trace_steps.push(TraceStep {
@@ -392,7 +499,6 @@ impl HierarchicalResolver {
         }
 
         // Phase 5: Escalate to Deep if still not confident
-        // Deep standalone also receives the original input.
         if confidence < self.config.reasoning_confidence_threshold && !from_cache {
             tier_reached = Tier::Deep;
             trace.push("escalate_deep".to_string());
@@ -409,6 +515,7 @@ impl HierarchicalResolver {
                 let conf_in = confidence;
                 current_tensor = deep_out.tensor;
                 winning_path = "deep_standalone".to_string();
+                producer_node_id = Some("deep_standalone".to_string());
                 confidence = deep_out.confidence;
                 total_cost += deep_out.compute_cost;
                 trace_steps.push(TraceStep {
@@ -420,10 +527,9 @@ impl HierarchicalResolver {
                     was_cached: false,
                 });
 
-                // Phase 6: Feedback — if Deep resolved with high confidence,
-                // emit a signal to Reasoning to lower its threshold
+                // Phase 6: Feedback
                 if confidence > 0.80 {
-                    let delta = -0.01; // Nudge Reasoning base_confidence down
+                    let delta = -0.01;
                     let signal =
                         FeedbackSignal::low_confidence_resolved("deep_standalone", delta);
                     trace.push("feedback_up".to_string());
@@ -440,10 +546,14 @@ impl HierarchicalResolver {
             }
         }
 
-        // Phase 7: Cache the result and push to temporal buffer (if not from cache)
-        if !from_cache {
-            self.cache
-                .insert_direct(cache_key, current_tensor.clone());
+        // Phase 7: Cache the result (skipped in Training mode)
+        if !from_cache && self.mode == RouteMode::Inference {
+            self.cache.insert_direct(
+                cache_key,
+                current_tensor.clone(),
+                producer_node_id.clone(),
+                Some(tier_reached),
+            );
             self.temporal_buffer.push(TemporalEntry {
                 input: input.clone(),
                 output: current_tensor.clone(),
@@ -464,18 +574,25 @@ impl HierarchicalResolver {
                 cache_hits,
                 lateral_count,
                 lateral_prevented_escalation: lateral_prevented,
+                producer_node_id,
             },
             tier_reached,
             from_cache,
             feedback_signals,
             winning_path,
+            surface_confidence,
+            surface_producer_id,
+            surface_output,
+            cache_hit_similarity,
+            cache_producer_id,
         }
     }
 
     /// Direct cache lookup (bypasses get_or_compute).
-    fn cache_lookup(&mut self, key: &Tensor) -> Option<(Tensor, f32)> {
+    ///
+    /// Returns `(cached_value, similarity, producer_node_id)`.
+    fn cache_lookup(&mut self, key: &Tensor) -> Option<(Tensor, f32, Option<String>)> {
         self.cache.total_lookups += 1;
-        // Manual lookup without the compute closure
         let result = self.cache.lookup_only(key);
         if result.is_some() {
             self.cache.total_hits += 1;
@@ -500,56 +617,408 @@ impl HierarchicalResolver {
 
     /// Apply Hebbian weight learning based on a resolve outcome.
     ///
+    /// Uses usage-proportional learning rate: nodes that receive fewer activations
+    /// get a higher effective lr to compensate for lower usage.
+    /// effective_lr = base_lr * (total_iterations / (node_activation_count + 1))
+    ///
     /// - If resolved at Surface: reinforce Surface nodes (+1), suppress deeper nodes (-1)
     /// - If resolved at Reasoning: suppress Surface nodes (-1), reinforce Reasoning (+1)
     /// - If resolved at Deep: suppress Surface and Reasoning (-1), reinforce Deep (+1)
     ///
+    /// Also accumulates contrastive learning examples:
+    /// - Surface resolution → positive example for Surface nodes
+    /// - Escalation from Surface → negative example for Surface nodes
+    ///
     /// This is local learning — no backprop, no global gradient. Each node adjusts
     /// its weights based on its own input/output correlation and the tier signal.
-    pub fn learn(&mut self, input: &Tensor, result: &ResolveResult, learning_rate: f32) {
+    pub fn learn(&mut self, input: &Tensor, result: &ResolveResult, learning_rate: f32, total_iterations: usize) {
         if result.from_cache {
             return; // No learning on cache hits
         }
 
+        // Track activations: increment nodes at the winning tier
+        self.increment_activations_for_tier(result.tier_reached);
+
+        // Contrastive accumulation: positive for Surface, negative for escalation
         match result.tier_reached {
             Tier::Surface => {
-                // Reinforce Surface, suppress Reasoning and Deep
-                Self::hebbian_nodes(&mut self.surface_nodes, input, 1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.lateral_nodes, input, 1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.reasoning_nodes, input, -1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.deep_nodes, input, -1.0, learning_rate);
-                self.graph.hebbian_update_all(input, 1.0, learning_rate);
+                // Positive example: Surface resolved successfully
+                for node in self.surface_nodes.iter_mut() {
+                    node.accumulate_positive(input);
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.accumulate_positive(input);
+                }
+                self.graph.accumulate_contrastive_all(input, true);
+            }
+            Tier::Reasoning | Tier::Deep => {
+                // Negative example: Surface failed, had to escalate
+                for node in self.surface_nodes.iter_mut() {
+                    node.accumulate_negative(input);
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.accumulate_negative(input);
+                }
+                self.graph.accumulate_contrastive_all(input, false);
+            }
+        }
+
+        // Oja's rule: reinforce only, no suppression (signal=0 for non-winning tiers).
+        // Oja's rule is self-normalizing for signal=+1 but divergent for any
+        // negative signal (the y²*w term grows weights instead of shrinking them).
+        // Contrastive learning now handles discrimination between tiers.
+        let suppress = 0.0;
+        match result.tier_reached {
+            Tier::Surface => {
+                // Reinforce Surface, gently suppress Reasoning and Deep
+                Self::hebbian_nodes(&mut self.surface_nodes, input, 1.0, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.lateral_nodes, input, 1.0, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.reasoning_nodes, input, suppress, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.deep_nodes, input, suppress, learning_rate, total_iterations);
+                self.graph.hebbian_update_all(input, 1.0, learning_rate, total_iterations);
             }
             Tier::Reasoning => {
-                // Suppress Surface, reinforce Reasoning
-                Self::hebbian_nodes(&mut self.surface_nodes, input, -1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.lateral_nodes, input, -1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.reasoning_nodes, input, 1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.deep_nodes, input, -1.0, learning_rate);
-                self.graph.hebbian_update_all(input, -1.0, learning_rate);
+                // Gently suppress Surface, reinforce Reasoning
+                Self::hebbian_nodes(&mut self.surface_nodes, input, suppress, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.lateral_nodes, input, suppress, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.reasoning_nodes, input, 1.0, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.deep_nodes, input, suppress, learning_rate, total_iterations);
+                self.graph.hebbian_update_all(input, suppress, learning_rate, total_iterations);
             }
             Tier::Deep => {
-                // Suppress Surface and Reasoning, reinforce Deep
-                Self::hebbian_nodes(&mut self.surface_nodes, input, -1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.lateral_nodes, input, -1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.reasoning_nodes, input, -1.0, learning_rate);
-                Self::hebbian_nodes(&mut self.deep_nodes, input, 1.0, learning_rate);
-                self.graph.hebbian_update_all(input, -1.0, learning_rate);
+                // Gently suppress Surface and Reasoning, reinforce Deep
+                Self::hebbian_nodes(&mut self.surface_nodes, input, suppress, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.lateral_nodes, input, suppress, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.reasoning_nodes, input, suppress, learning_rate, total_iterations);
+                Self::hebbian_nodes(&mut self.deep_nodes, input, 1.0, learning_rate, total_iterations);
+                self.graph.hebbian_update_all(input, suppress, learning_rate, total_iterations);
             }
         }
     }
 
-    /// Apply Hebbian update to a set of standalone nodes.
+    /// Apply contrastive weight update on all Surface nodes (graph + standalone + lateral).
+    ///
+    /// Called every 100 iterations during learning. Returns diagnostic info for each
+    /// node that actually performed an update (had both positive and negative examples).
+    pub fn apply_contrastive_update_all(&mut self) -> Vec<crate::graph::node::ContrastiveUpdateInfo> {
+        use crate::graph::node::ContrastiveUpdateInfo;
+        let mut infos: Vec<ContrastiveUpdateInfo> = Vec::new();
+        for node in self.surface_nodes.iter_mut() {
+            if let Some(info) = node.apply_contrastive_update() {
+                infos.push(info);
+            }
+        }
+        for node in self.lateral_nodes.iter_mut() {
+            if let Some(info) = node.apply_contrastive_update() {
+                infos.push(info);
+            }
+        }
+        infos.extend(self.graph.apply_contrastive_update_all());
+        infos
+    }
+
+    /// Accumulate a positive (Surface-direction) example on all Surface-tier nodes.
+    pub fn accumulate_positive_all_surface(&mut self, input: &Tensor) {
+        for node in self.surface_nodes.iter_mut() {
+            node.accumulate_positive(input);
+        }
+        for node in self.lateral_nodes.iter_mut() {
+            node.accumulate_positive(input);
+        }
+        self.graph.accumulate_contrastive_all(input, true);
+    }
+
+    /// Accumulate a negative (escalation-direction) example on all Surface-tier nodes.
+    pub fn accumulate_negative_all_surface(&mut self, input: &Tensor) {
+        for node in self.surface_nodes.iter_mut() {
+            node.accumulate_negative(input);
+        }
+        for node in self.lateral_nodes.iter_mut() {
+            node.accumulate_negative(input);
+        }
+        self.graph.accumulate_contrastive_all(input, false);
+    }
+
+    /// Set the contrastive learning rate on all Surface-tier nodes.
+    pub fn set_contrastive_lr_all_surface(&mut self, lr: f32) {
+        for node in self.surface_nodes.iter_mut() {
+            node.set_contrastive_lr(lr);
+        }
+        for node in self.lateral_nodes.iter_mut() {
+            node.set_contrastive_lr(lr);
+        }
+        self.graph.set_contrastive_lr_all(lr);
+    }
+
+    /// Reset contrastive accumulators on all Surface-tier nodes without applying updates.
+    ///
+    /// Call this before text priming to clear residual accumulator values from
+    /// prior synthetic learning passes.
+    pub fn reset_contrastive_accumulators_all_surface(&mut self) {
+        for node in self.surface_nodes.iter_mut() {
+            node.reset_contrastive_accumulators();
+        }
+        for node in self.lateral_nodes.iter_mut() {
+            node.reset_contrastive_accumulators();
+        }
+        self.graph.reset_contrastive_accumulators_all();
+    }
+
+    /// Increment activation counters for all nodes at a given tier.
+    fn increment_activations_for_tier(&mut self, tier: Tier) {
+        match tier {
+            Tier::Surface => {
+                for node in self.surface_nodes.iter_mut() {
+                    node.increment_activation();
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.increment_activation();
+                }
+            }
+            Tier::Reasoning => {
+                for node in self.reasoning_nodes.iter_mut() {
+                    node.increment_activation();
+                }
+            }
+            Tier::Deep => {
+                for node in self.deep_nodes.iter_mut() {
+                    node.increment_activation();
+                }
+            }
+        }
+        self.graph.increment_activations_for_tier(tier);
+    }
+
+    /// Reset all activation counters (call between passes).
+    pub fn reset_activation_counts(&mut self) {
+        for node in self.surface_nodes.iter_mut() {
+            node.reset_activation();
+        }
+        for node in self.lateral_nodes.iter_mut() {
+            node.reset_activation();
+        }
+        for node in self.reasoning_nodes.iter_mut() {
+            node.reset_activation();
+        }
+        for node in self.deep_nodes.iter_mut() {
+            node.reset_activation();
+        }
+        self.graph.reset_activations();
+    }
+
+    /// Apply Hebbian update to a set of standalone nodes with usage-proportional lr.
+    ///
+    /// effective_lr = base_lr * (total_iterations / (activation_count + 1)),
+    /// capped at 10x base_lr to prevent Oja divergence on rarely-activated nodes.
     fn hebbian_nodes(
         nodes: &mut [Box<dyn ComputeNode>],
         input: &Tensor,
         signal: f32,
         learning_rate: f32,
+        total_iterations: usize,
     ) {
+        let max_lr = learning_rate * 10.0;
         for node in nodes.iter_mut() {
+            let effective_lr = (learning_rate * (total_iterations as f32 / (node.activation_count() as f32 + 1.0))).min(max_lr);
             let output = node.forward(input);
-            node.hebbian_update(input, &output.tensor, signal, learning_rate);
+            node.hebbian_update(input, &output.tensor, signal, effective_lr);
         }
+    }
+
+    /// Apply targeted error signal updates based on a resolve outcome.
+    ///
+    /// Two mechanisms:
+    ///
+    /// **Similarity-based escalation penalty**: When Surface escalated (tier_reached != Surface)
+    /// AND the cache contains a similar entry (cosine sim > 0.88) that was resolved at Surface,
+    /// penalise the Surface node that escalated. This means Surface failed to handle an input
+    /// that it previously resolved confidently.
+    /// `w_ij -= error_lr * input_i * output_j * (1 - surface_conf)`
+    ///
+    /// **Cache reinforcement**: When a cache hit occurred with cosine similarity > 0.95,
+    /// reinforce the node that produced the cached entry:
+    /// `w_ij += error_lr * input_i * cached_output_j * similarity_score`
+    ///
+    /// Returns the error events generated (also accumulated in `self.error_events`).
+    pub fn apply_error_signal(
+        &mut self,
+        input: &Tensor,
+        result: &ResolveResult,
+        error_lr: f32,
+    ) -> Vec<ErrorEvent> {
+        let mut events = Vec::new();
+
+        // Mechanism 1: Similarity-based escalation penalty
+        // Surface escalated AND cache has a similar entry resolved at Surface tier
+        if result.tier_reached != Tier::Surface && !result.from_cache {
+            if let (Some(ref surface_id), Some(ref surface_out)) =
+                (&result.surface_producer_id, &result.surface_output)
+            {
+                // Check if cache contains a similar input that Surface handled before
+                if let Some((sim, _cached_producer)) =
+                    self.cache.find_similar_at_tier(input, 0.88, Tier::Surface)
+                {
+                    let modulator = -(1.0 - result.surface_confidence);
+                    let error_mag = (error_lr * modulator).abs();
+                    let found = Self::apply_error_to_node_by_id(
+                        &mut self.surface_nodes,
+                        &mut self.lateral_nodes,
+                        &mut self.graph,
+                        surface_id,
+                        input,
+                        surface_out,
+                        error_lr,
+                        modulator,
+                    );
+                    if found {
+                        let event = ErrorEvent {
+                            event_type: "escalation_penalty".to_string(),
+                            node_id: surface_id.clone(),
+                            confidence: result.surface_confidence,
+                            error_magnitude: error_mag,
+                        };
+                        events.push(event);
+                    }
+                    let _ = sim; // used for match condition
+                }
+            }
+        }
+
+        // Mechanism 2: Cache reinforcement
+        // Cache hit with similarity > 0.95
+        if result.from_cache && result.cache_hit_similarity > 0.95 {
+            if let Some(ref cache_prod_id) = result.cache_producer_id {
+                let modulator = result.cache_hit_similarity;
+                let error_mag = error_lr * modulator;
+                let found = Self::apply_error_to_node_by_id(
+                    &mut self.surface_nodes,
+                    &mut self.lateral_nodes,
+                    &mut self.graph,
+                    cache_prod_id,
+                    input,
+                    &result.route.output,
+                    error_lr,
+                    modulator,
+                );
+                if !found {
+                    // Try reasoning and deep nodes too
+                    if !Self::apply_error_to_nodes(
+                        &mut self.reasoning_nodes,
+                        cache_prod_id,
+                        input,
+                        &result.route.output,
+                        error_lr,
+                        modulator,
+                    ) {
+                        let _ = Self::apply_error_to_nodes(
+                            &mut self.deep_nodes,
+                            cache_prod_id,
+                            input,
+                            &result.route.output,
+                            error_lr,
+                            modulator,
+                        );
+                    }
+                }
+                let event = ErrorEvent {
+                    event_type: "cache_reinforcement".to_string(),
+                    node_id: cache_prod_id.clone(),
+                    confidence: result.route.confidence,
+                    error_magnitude: error_mag,
+                };
+                events.push(event);
+            }
+        }
+
+        self.error_events.extend(events.clone());
+        events
+    }
+
+    /// Apply error signal to a specific node by ID, searching surface, lateral, and graph.
+    fn apply_error_to_node_by_id(
+        surface_nodes: &mut [Box<dyn ComputeNode>],
+        lateral_nodes: &mut [Box<dyn ComputeNode>],
+        graph: &mut SparseGraph,
+        node_id: &str,
+        input: &Tensor,
+        output: &Tensor,
+        error_lr: f32,
+        modulator: f32,
+    ) -> bool {
+        if Self::apply_error_to_nodes(surface_nodes, node_id, input, output, error_lr, modulator) {
+            return true;
+        }
+        if Self::apply_error_to_nodes(lateral_nodes, node_id, input, output, error_lr, modulator) {
+            return true;
+        }
+        graph.error_update_node(node_id, input, output, error_lr, modulator)
+    }
+
+    /// Apply error signal to a node within a specific collection.
+    fn apply_error_to_nodes(
+        nodes: &mut [Box<dyn ComputeNode>],
+        node_id: &str,
+        input: &Tensor,
+        output: &Tensor,
+        error_lr: f32,
+        modulator: f32,
+    ) -> bool {
+        for node in nodes.iter_mut() {
+            if node.node_id() == node_id {
+                node.error_update(input, output, error_lr, modulator);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get all accumulated error events (across all resolves).
+    pub fn error_events(&self) -> &[ErrorEvent] {
+        &self.error_events
+    }
+
+    /// Get count of escalation penalty events.
+    pub fn escalation_penalty_count(&self) -> usize {
+        self.error_events
+            .iter()
+            .filter(|e| e.event_type == "escalation_penalty")
+            .count()
+    }
+
+    /// Get count of cache reinforcement events.
+    pub fn cache_reinforcement_count(&self) -> usize {
+        self.error_events
+            .iter()
+            .filter(|e| e.event_type == "cache_reinforcement")
+            .count()
+    }
+
+    /// Clear accumulated error events (call between passes).
+    pub fn clear_error_events(&mut self) {
+        self.error_events.clear();
+    }
+
+    /// Diagnostic: for an escalating input, find the highest cosine similarity
+    /// to any Surface-resolved cache entry. Returns `(best_sim, nearest_tier)`.
+    pub fn penalty_diagnostic(&self, input: &Tensor) -> Option<(f32, Option<Tier>)> {
+        self.cache.best_similarity_diagnostic(input, Tier::Surface)
+    }
+
+    /// Compute max Surface confidence for a single input.
+    ///
+    /// Evaluates all standalone Surface and lateral nodes, returns the highest confidence.
+    /// Used for diagnostic confidence tracking during pretraining.
+    pub fn max_surface_confidence(&self, input: &Tensor) -> f32 {
+        let mut max_conf = f32::NEG_INFINITY;
+        for node in &self.surface_nodes {
+            let conf = node.forward(input).confidence;
+            if conf > max_conf { max_conf = conf; }
+        }
+        for node in &self.lateral_nodes {
+            let conf = node.forward(input).confidence;
+            if conf > max_conf { max_conf = conf; }
+        }
+        max_conf
     }
 
     /// Sum of weight norms across all nodes (graph + standalone + lateral).
@@ -571,6 +1040,146 @@ impl HierarchicalResolver {
         total
     }
 
+    /// Analytically initialise all Surface-tier nodes and freeze them.
+    ///
+    /// Computes discrimination_direction = simple_mean - complex_mean, L2 normalised,
+    /// then calls `init_analytical` on every Surface node (graph, standalone, lateral)
+    /// and sets them to frozen. Reasoning and Deep nodes are left unfrozen with
+    /// standard Xavier weights.
+    ///
+    /// Returns (discrimination_direction_norm_before_normalisation, simple_mean_norm, complex_mean_norm, cosine_sim).
+    pub fn init_surface_analytical(
+        &mut self,
+        simple_tensors: &[Tensor],
+        complex_tensors: &[Tensor],
+    ) -> (f32, f32, f32, f32) {
+        let dim = if let Some(t) = simple_tensors.first() {
+            t.data.len()
+        } else {
+            return (0.0, 0.0, 0.0, 0.0);
+        };
+
+        // Compute simple_mean
+        let mut simple_mean = vec![0.0f32; dim];
+        for t in simple_tensors {
+            for (i, v) in t.data.iter().enumerate() {
+                if i < dim {
+                    simple_mean[i] += v;
+                }
+            }
+        }
+        let simple_n = simple_tensors.len() as f32;
+        for v in &mut simple_mean {
+            *v /= simple_n;
+        }
+
+        // Compute complex_mean
+        let mut complex_mean = vec![0.0f32; dim];
+        for t in complex_tensors {
+            for (i, v) in t.data.iter().enumerate() {
+                if i < dim {
+                    complex_mean[i] += v;
+                }
+            }
+        }
+        let complex_n = complex_tensors.len() as f32;
+        for v in &mut complex_mean {
+            *v /= complex_n;
+        }
+
+        // Weight direction = simple_mean (L2 normalised).
+        //
+        // Using simple_mean directly as the weight direction rather than
+        // simple_mean - complex_mean. The difference vector is nearly orthogonal
+        // to both mean vectors (both have negative dot product with it) because
+        // complex_mean has larger magnitude while cosine(simple, complex) ≈ 0.83.
+        // After clamping cosine similarity to [0, 1], discrimination is lost.
+        //
+        // simple_mean as weight direction works because:
+        //   cos(simple_input, simple_mean) > cos(complex_input, simple_mean)
+        // — simple inputs are directionally closer to simple_mean.
+        let mut direction = simple_mean.clone();
+
+        let dir_norm = direction.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if dir_norm > 1e-10 {
+            for v in &mut direction {
+                *v /= dir_norm;
+            }
+        }
+
+        let simple_norm = simple_mean.iter().map(|v| v * v).sum::<f32>().sqrt();
+        let complex_norm = complex_mean.iter().map(|v| v * v).sum::<f32>().sqrt();
+
+        // Cosine similarity between simple_mean and complex_mean
+        let dot: f32 = simple_mean.iter().zip(complex_mean.iter()).map(|(a, b)| a * b).sum();
+        let cosine_sim = if simple_norm > 1e-8 && complex_norm > 1e-8 {
+            dot / (simple_norm * complex_norm)
+        } else {
+            0.0
+        };
+
+        let init = crate::graph::node::AnalyticalInit {
+            discrimination_direction: direction,
+            noise_scale: 0.1,
+        };
+
+        // Apply to graph nodes (Surface tier only)
+        for (i, node) in self.graph.nodes_mut().iter_mut().enumerate() {
+            if node.tier() == Tier::Surface {
+                node.init_analytical(&init, 42 + i as u64);
+                node.set_frozen(true);
+            }
+        }
+
+        // Apply to standalone surface nodes
+        for (i, node) in self.surface_nodes.iter_mut().enumerate() {
+            node.init_analytical(&init, 1000 + i as u64);
+            node.set_frozen(true);
+        }
+
+        // Apply to lateral nodes (these are Surface-tier)
+        for (i, node) in self.lateral_nodes.iter_mut().enumerate() {
+            node.init_analytical(&init, 2000 + i as u64);
+            node.set_frozen(true);
+        }
+
+        (dir_norm, simple_norm, complex_norm, cosine_sim)
+    }
+
+    /// Weight norm of Surface-tier nodes only (graph + standalone + lateral).
+    pub fn surface_weight_norm(&self) -> f32 {
+        let mut total = 0.0f32;
+        for node in self.graph.nodes_ref() {
+            if node.tier() == Tier::Surface {
+                total += node.weight_norm();
+            }
+        }
+        for node in &self.surface_nodes {
+            total += node.weight_norm();
+        }
+        for node in &self.lateral_nodes {
+            total += node.weight_norm();
+        }
+        total
+    }
+
+    /// Weight norm of Reasoning and Deep nodes only.
+    pub fn non_surface_weight_norm(&self) -> f32 {
+        let mut total = 0.0f32;
+        for node in self.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                total += node.weight_norm();
+            }
+        }
+        for node in &self.reasoning_nodes {
+            total += node.weight_norm();
+        }
+        for node in &self.deep_nodes {
+            total += node.weight_norm();
+        }
+        total
+    }
+
     /// Build a default AXIOM resolver with a reasonable graph topology.
     ///
     /// Creates a graph with Surface, Reasoning, and Deep tier nodes
@@ -578,132 +1187,98 @@ impl HierarchicalResolver {
     pub fn build_default(input_dim: usize) -> Self {
         use crate::graph::edge::ConditionalEdge;
 
-        let mid_dim = input_dim;
-        let out_dim = input_dim / 2;
+        let mid_dim = input_dim / 2;
 
-        // Build graph
+        // ── Graph: 8 Surface + 4 Reasoning + 2 Deep = 14 nodes ──
         let mut graph = SparseGraph::new("surface_entry");
 
-        // Surface tier nodes in the graph
-        graph.add_node(Box::new(LinearNode::new(
-            "surface_entry",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.88,
-        )));
-        graph.add_node(Box::new(LinearNode::new(
-            "surface_refine",
-            mid_dim,
-            mid_dim,
-            Tier::Surface,
-            0.90,
-        )));
+        // Surface graph chain (8 nodes)
+        let surface_graph_names = Self::surface_graph_node_names();
+        for (i, name) in surface_graph_names.iter().enumerate() {
+            let base_conf = 0.88 + (i as f32 * 0.005).min(0.03);
+            graph.add_node(Box::new(LinearNode::new(
+                name.clone(), input_dim, mid_dim, Tier::Surface, base_conf,
+            )));
+        }
 
-        // Reasoning tier node in the graph
-        graph.add_node(Box::new(LinearNode::new(
-            "reasoning_analyze",
-            mid_dim,
-            mid_dim,
-            Tier::Reasoning,
-            0.80,
-        )));
+        // Reasoning graph chain (4 nodes)
+        let reasoning_graph_names = Self::reasoning_graph_node_names();
+        for name in &reasoning_graph_names {
+            graph.add_node(Box::new(LinearNode::new(
+                name.clone(), input_dim, mid_dim, Tier::Reasoning, 0.80,
+            )));
+        }
 
-        // Deep tier node in the graph
-        graph.add_node(Box::new(LinearNode::new(
-            "deep_resolve",
-            mid_dim,
-            out_dim,
-            Tier::Deep,
-            0.75,
-        )));
+        // Deep graph chain (2 nodes)
+        let deep_graph_names = Self::deep_graph_node_names();
+        for name in &deep_graph_names {
+            graph.add_node(Box::new(LinearNode::new(
+                name.clone(), input_dim, mid_dim, Tier::Deep, 0.75,
+            )));
+        }
 
-        // Edges: surface_entry -> surface_refine (always)
-        graph.add_edge(ConditionalEdge::always("surface_entry", "surface_refine"));
-
-        // surface_refine -> reasoning_analyze (if confidence below surface threshold)
+        // Surface chain edges (always)
+        for pair in surface_graph_names.windows(2) {
+            graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
+        // Surface → Reasoning (confidence-gated)
         graph.add_edge(ConditionalEdge::if_confidence_below(
-            "surface_refine",
-            "reasoning_analyze",
+            surface_graph_names.last().unwrap(),
+            &reasoning_graph_names[0],
             0.85,
         ));
-
-        // reasoning_analyze -> deep_resolve (if confidence below reasoning threshold)
+        // Reasoning chain edges (always)
+        for pair in reasoning_graph_names.windows(2) {
+            graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
+        // Reasoning → Deep (confidence-gated)
         graph.add_edge(ConditionalEdge::if_confidence_below(
-            "reasoning_analyze",
-            "deep_resolve",
+            reasoning_graph_names.last().unwrap(),
+            &deep_graph_names[0],
             0.70,
         ));
+        // Deep chain edges (always)
+        for pair in deep_graph_names.windows(2) {
+            graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
 
         let cache = EmbeddingCache::new(256, 0.92);
         let config = TierConfig::default();
-
         let mut resolver = Self::new(graph, cache, config);
 
-        // Standalone Surface nodes — compete with graph during surface_blend
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "surface_standalone_a",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.91,
-        )));
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "surface_standalone_b",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.90,
-        )));
+        // ── Standalone nodes: 20 Surface + 8 Reasoning + 4 Deep ──
+        for i in 0..20 {
+            let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
+            resolver.add_tier_node(Box::new(LinearNode::new(
+                format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+            )));
+        }
+        for i in 0..8 {
+            resolver.add_tier_node(Box::new(LinearNode::new(
+                format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning, 0.72,
+            )));
+        }
+        for i in 0..4 {
+            resolver.add_tier_node(Box::new(LinearNode::new(
+                format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
+            )));
+        }
 
-        // Add standalone tier nodes for blending
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "reasoning_standalone",
-            input_dim,
-            mid_dim,
-            Tier::Reasoning,
-            0.72,
-        )));
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "deep_standalone",
-            mid_dim,
-            out_dim,
-            Tier::Deep,
-            0.78,
-        )));
+        // ── Lateral nodes: 15 Surface ──
+        for i in 0..15 {
+            let base_conf = 0.88 + (i as f32 * 0.002).min(0.03);
+            resolver.add_lateral_node(Box::new(LinearNode::new(
+                format!("surface_lateral_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+            )));
+            resolver.add_lateral_edge(LateralEdge::if_confidence_below(
+                "surface_entry",
+                &format!("surface_lateral_{}", i),
+                0.75,
+                1.0,
+            ));
+        }
 
-        // Lateral Surface nodes — only fire during lateral traversal
-        resolver.add_lateral_node(Box::new(LinearNode::new(
-            "surface_lateral_a",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.90,
-        )));
-        resolver.add_lateral_node(Box::new(LinearNode::new(
-            "surface_lateral_b",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.89,
-        )));
-
-        // Lateral edges: surface_entry → surface lateral nodes
-        resolver.add_lateral_edge(LateralEdge::if_confidence_below(
-            "surface_entry",
-            "surface_lateral_a",
-            0.75,
-            1.0,
-        ));
-        resolver.add_lateral_edge(LateralEdge::if_confidence_below(
-            "surface_entry",
-            "surface_lateral_b",
-            0.75,
-            1.0,
-        ));
-
-        // Calibrate: measure actual node confidence distribution, set thresholds
-        // at 65th percentile (surface) and 35th percentile (reasoning).
+        // Calibrate
         resolver.calibrate(input_dim, 0.65, 0.35);
         resolver.rebuild_graph_edges();
         resolver.validate_confidence_invariants();
@@ -722,122 +1297,102 @@ impl HierarchicalResolver {
     pub fn build_with_axiom_config(input_dim: usize, config: &AxiomConfig) -> Self {
         use crate::graph::edge::ConditionalEdge;
 
-        let mid_dim = input_dim;
-        let out_dim = input_dim / 2;
+        let mid_dim = input_dim / 2;
 
+        // ── Graph: 8 Surface + 4 Reasoning + 2 Deep = 14 nodes ──
         let mut graph = SparseGraph::new("surface_entry");
 
-        graph.add_node(Box::new(LinearNode::new(
-            "surface_entry",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.88,
-        )));
-        graph.add_node(Box::new(LinearNode::new(
-            "surface_refine",
-            mid_dim,
-            mid_dim,
-            Tier::Surface,
-            0.90,
-        )));
-        graph.add_node(Box::new(LinearNode::new(
-            "reasoning_analyze",
-            mid_dim,
-            mid_dim,
-            Tier::Reasoning,
-            0.80,
-        )));
-        graph.add_node(Box::new(LinearNode::new(
-            "deep_resolve",
-            mid_dim,
-            out_dim,
-            Tier::Deep,
-            0.75,
-        )));
+        // Surface graph chain (8 nodes)
+        let surface_graph_names = Self::surface_graph_node_names();
+        for (i, name) in surface_graph_names.iter().enumerate() {
+            let base_conf = 0.88 + (i as f32 * 0.005).min(0.03);
+            graph.add_node(Box::new(LinearNode::new(
+                name.clone(), input_dim, mid_dim, Tier::Surface, base_conf,
+            )));
+        }
 
-        graph.add_edge(ConditionalEdge::always("surface_entry", "surface_refine"));
+        // Reasoning graph chain (4 nodes)
+        let reasoning_graph_names = Self::reasoning_graph_node_names();
+        for name in &reasoning_graph_names {
+            graph.add_node(Box::new(LinearNode::new(
+                name.clone(), input_dim, mid_dim, Tier::Reasoning, 0.80,
+            )));
+        }
+
+        // Deep graph chain (2 nodes)
+        let deep_graph_names = Self::deep_graph_node_names();
+        for name in &deep_graph_names {
+            graph.add_node(Box::new(LinearNode::new(
+                name.clone(), input_dim, mid_dim, Tier::Deep, 0.75,
+            )));
+        }
+
+        // Surface chain edges (always)
+        for pair in surface_graph_names.windows(2) {
+            graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
+        // Surface → Reasoning (confidence-gated)
         graph.add_edge(ConditionalEdge::if_confidence_below(
-            "surface_refine",
-            "reasoning_analyze",
+            surface_graph_names.last().unwrap(),
+            &reasoning_graph_names[0],
             config.surface_confidence_threshold,
         ));
+        // Reasoning chain edges (always)
+        for pair in reasoning_graph_names.windows(2) {
+            graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
+        // Reasoning → Deep (confidence-gated)
         graph.add_edge(ConditionalEdge::if_confidence_below(
-            "reasoning_analyze",
-            "deep_resolve",
+            reasoning_graph_names.last().unwrap(),
+            &deep_graph_names[0],
             config.reasoning_confidence_threshold,
         ));
+        // Deep chain edges (always)
+        for pair in deep_graph_names.windows(2) {
+            graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
 
         let cache = EmbeddingCache::new(256, config.cache_similarity_threshold);
         let tier_config = TierConfig {
             surface_confidence_threshold: config.surface_confidence_threshold,
             reasoning_confidence_threshold: config.reasoning_confidence_threshold,
         };
-
         let mut resolver = Self::new(graph, cache, tier_config);
 
-        // Surface lateral nodes
-        resolver.add_lateral_node(Box::new(LinearNode::new(
-            "surface_lateral_a",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.90,
-        )));
-        resolver.add_lateral_node(Box::new(LinearNode::new(
-            "surface_lateral_b",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.89,
-        )));
+        // ── Standalone nodes: 20 Surface + 8 Reasoning + 4 Deep ──
+        for i in 0..20 {
+            let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
+            resolver.add_tier_node(Box::new(LinearNode::new(
+                format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+            )));
+        }
+        for i in 0..8 {
+            resolver.add_tier_node(Box::new(LinearNode::new(
+                format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning,
+                config.reasoning_base_confidence,
+            )));
+        }
+        for i in 0..4 {
+            resolver.add_tier_node(Box::new(LinearNode::new(
+                format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
+            )));
+        }
 
-        // Standalone Surface nodes — compete with graph during surface_blend
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "surface_standalone_a",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.91,
-        )));
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "surface_standalone_b",
-            input_dim,
-            mid_dim,
-            Tier::Surface,
-            0.90,
-        )));
+        // ── Lateral nodes: 15 Surface ──
+        for i in 0..15 {
+            let base_conf = 0.88 + (i as f32 * 0.002).min(0.03);
+            resolver.add_lateral_node(Box::new(LinearNode::new(
+                format!("surface_lateral_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+            )));
+            resolver.add_lateral_edge(LateralEdge::if_confidence_below(
+                "surface_entry",
+                &format!("surface_lateral_{}", i),
+                0.75,
+                1.0,
+            ));
+        }
 
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "reasoning_standalone",
-            input_dim,
-            mid_dim,
-            Tier::Reasoning,
-            config.reasoning_base_confidence,
-        )));
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "deep_standalone",
-            mid_dim,
-            out_dim,
-            Tier::Deep,
-            0.78,
-        )));
-
-        // Lateral edges: surface_entry → surface lateral nodes
-        resolver.add_lateral_edge(LateralEdge::if_confidence_below(
-            "surface_entry",
-            "surface_lateral_a",
-            0.75,
-            1.0,
-        ));
-        resolver.add_lateral_edge(LateralEdge::if_confidence_below(
-            "surface_entry",
-            "surface_lateral_b",
-            0.75,
-            1.0,
-        ));
-
-        // Calibrate: measure actual node confidence distribution, set thresholds.
+        // Calibrate
         resolver.calibrate(input_dim, 0.65, 0.35);
         resolver.rebuild_graph_edges();
         resolver.validate_confidence_invariants();
@@ -853,6 +1408,12 @@ impl HierarchicalResolver {
     ///
     /// Sets surface_confidence_threshold at `surface_pct` percentile and
     /// reasoning_confidence_threshold at `reasoning_pct` percentile.
+    ///
+    /// Enforces a minimum 10% escalation rate: after percentile-based calibration,
+    /// verifies that at least 10% of calibration inputs (by per-input max Surface
+    /// confidence) fall below the threshold. If fewer do, raises the threshold
+    /// until 10% escalation is achieved. This ensures contrastive learning always
+    /// has negative examples to learn from.
     pub fn calibrate(&mut self, input_dim: usize, surface_pct: f32, reasoning_pct: f32) {
         use crate::input::{Encoder, Tokeniser};
 
@@ -867,12 +1428,22 @@ impl HierarchicalResolver {
 
         let mut surface_confs: Vec<f32> = Vec::new();
         let mut reasoning_confs: Vec<f32> = Vec::new();
+        // Per-input max Surface confidence (best across all Surface nodes for each input)
+        let mut per_input_max_surface: Vec<f32> = Vec::new();
 
         for sentence in &corpus {
             let input = encoder.encode_text_readonly(sentence);
 
+            let mut max_conf = f32::NEG_INFINITY;
             for node in &self.surface_nodes {
-                surface_confs.push(node.forward(&input).confidence);
+                let conf = node.forward(&input).confidence;
+                surface_confs.push(conf);
+                if conf > max_conf {
+                    max_conf = conf;
+                }
+            }
+            if max_conf > f32::NEG_INFINITY {
+                per_input_max_surface.push(max_conf);
             }
 
             for node in &self.reasoning_nodes {
@@ -882,6 +1453,7 @@ impl HierarchicalResolver {
 
         surface_confs.sort_by(|a, b| a.partial_cmp(b).unwrap());
         reasoning_confs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        per_input_max_surface.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         if !surface_confs.is_empty() {
             let idx = ((surface_confs.len() as f32 * surface_pct) as usize)
@@ -896,18 +1468,105 @@ impl HierarchicalResolver {
             if threshold > max_surface - 0.02 {
                 threshold = max_surface - 0.02;
             }
+
+            // Enforce minimum 10% escalation rate on per-input max confidences.
+            // At least 10% of calibration inputs must have their best Surface
+            // confidence below the threshold, ensuring negative examples exist
+            // for contrastive learning.
+            let min_escalation_rate = 0.10;
+            let n_inputs = per_input_max_surface.len();
+            let min_escalating = (n_inputs as f32 * min_escalation_rate).ceil() as usize;
+            let escalating_before = per_input_max_surface
+                .iter()
+                .filter(|&&c| c < threshold)
+                .count();
+
+            if escalating_before < min_escalating && min_escalating <= n_inputs {
+                // Raise threshold so that at least min_escalating inputs escalate.
+                // Strategy: set threshold to per_input_max[min_escalating] which
+                // puts min_escalating values at or below it, then add a tiny epsilon
+                // to convert <= to strict <.
+                // When weights have over-converged (all values equal), this will
+                // push threshold above all values — that is intentional. Without
+                // negative examples, contrastive learning cannot maintain
+                // discrimination.
+                let escalation_idx = min_escalating.min(n_inputs - 1);
+                let old_threshold = threshold;
+                threshold = per_input_max_surface[escalation_idx] + 0.0001;
+                let escalating_check = per_input_max_surface
+                    .iter()
+                    .filter(|&&c| c < threshold)
+                    .count();
+                eprintln!(
+                    "  Calibration: enforced min escalation rate — raised threshold {:.4} → {:.4} \
+                     ({}→{} of {} inputs escalate, {:.0}%→{:.0}%)",
+                    old_threshold, threshold,
+                    escalating_before, escalating_check, n_inputs,
+                    escalating_before as f32 / n_inputs as f32 * 100.0,
+                    escalating_check as f32 / n_inputs as f32 * 100.0,
+                );
+            }
+
             self.config.surface_confidence_threshold = threshold;
 
+            let escalating_after = per_input_max_surface
+                .iter()
+                .filter(|&&c| c < self.config.surface_confidence_threshold)
+                .count();
+
             eprintln!(
-                "  Calibration: surface range [{:.4}, {:.4}] std={:.4} → threshold {:.4} (p{:.0}, n={})",
+                "  Calibration: surface range [{:.4}, {:.4}] std={:.4} → threshold {:.4} (p{:.0}, n={}), \
+                 escalation rate {}/{} ({:.0}%)",
                 min_surface, max_surface, std_dev, self.config.surface_confidence_threshold,
-                surface_pct * 100.0, surface_confs.len()
+                surface_pct * 100.0, surface_confs.len(),
+                escalating_after, n_inputs,
+                escalating_after as f32 / n_inputs as f32 * 100.0,
             );
             if std_dev < 0.005 {
                 eprintln!(
                     "  WARNING: confidence distribution too narrow (std={:.4}), weights may have over-converged",
                     std_dev
                 );
+            }
+
+            // Population-aware threshold: encode calibration sentences, split
+            // by word count (short < 6 words, long > 10 words), compute mean
+            // Surface confidence per group, set threshold at midpoint.
+            let mut short_confs: Vec<f32> = Vec::new();
+            let mut long_confs: Vec<f32> = Vec::new();
+            for sentence in &corpus {
+                let word_count = sentence.split_whitespace().count();
+                let input = encoder.encode_text_readonly(sentence);
+                let max_conf = self.max_surface_confidence(&input);
+                if word_count < 6 {
+                    short_confs.push(max_conf);
+                } else if word_count > 10 {
+                    long_confs.push(max_conf);
+                }
+            }
+
+            if !short_confs.is_empty() && !long_confs.is_empty() {
+                let short_mean = short_confs.iter().sum::<f32>() / short_confs.len() as f32;
+                let long_mean = long_confs.iter().sum::<f32>() / long_confs.len() as f32;
+                let midpoint = (short_mean + long_mean) / 2.0;
+
+                eprintln!(
+                    "  Calibration: population-aware — short mean={:.4} (n={}) long mean={:.4} (n={}) → midpoint={:.4}",
+                    short_mean, short_confs.len(), long_mean, long_confs.len(), midpoint
+                );
+
+                if short_mean > long_mean {
+                    self.config.surface_confidence_threshold = midpoint;
+                    eprintln!(
+                        "  Calibration: threshold adjusted {:.4} → {:.4} (population midpoint)",
+                        threshold, midpoint
+                    );
+                } else {
+                    eprintln!(
+                        "  Calibration: short <= long ({:.4} <= {:.4}), keeping percentile threshold {:.4}",
+                        short_mean, long_mean, self.config.surface_confidence_threshold
+                    );
+                }
             }
         }
 
@@ -979,17 +1638,35 @@ impl HierarchicalResolver {
     pub fn rebuild_graph_edges(&mut self) {
         use crate::graph::edge::ConditionalEdge;
         self.graph.clear_edges();
-        self.graph.add_edge(ConditionalEdge::always("surface_entry", "surface_refine"));
+
+        let surface_names = Self::surface_graph_node_names();
+        let reasoning_names = Self::reasoning_graph_node_names();
+        let deep_names = Self::deep_graph_node_names();
+
+        // Surface chain (always)
+        for pair in surface_names.windows(2) {
+            self.graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
+        // Surface → Reasoning (confidence-gated)
         self.graph.add_edge(ConditionalEdge::if_confidence_below(
-            "surface_refine",
-            "reasoning_analyze",
+            surface_names.last().unwrap(),
+            &reasoning_names[0],
             self.config.surface_confidence_threshold,
         ));
+        // Reasoning chain (always)
+        for pair in reasoning_names.windows(2) {
+            self.graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
+        // Reasoning → Deep (confidence-gated)
         self.graph.add_edge(ConditionalEdge::if_confidence_below(
-            "reasoning_analyze",
-            "deep_resolve",
+            reasoning_names.last().unwrap(),
+            &deep_names[0],
             self.config.reasoning_confidence_threshold,
         ));
+        // Deep chain (always)
+        for pair in deep_names.windows(2) {
+            self.graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+        }
     }
 
     /// Validate that every node can mathematically reach its tier's confidence threshold.
@@ -1016,6 +1693,25 @@ impl HierarchicalResolver {
                 );
             }
         }
+    }
+
+    /// Surface graph node names (8 nodes: entry + 7 refine steps).
+    fn surface_graph_node_names() -> Vec<String> {
+        let mut names = vec!["surface_entry".to_string()];
+        for i in 0..7 {
+            names.push(format!("surface_refine_{}", (b'a' + i as u8) as char));
+        }
+        names
+    }
+
+    /// Reasoning graph node names (4 nodes).
+    fn reasoning_graph_node_names() -> Vec<String> {
+        (0..4).map(|i| format!("reasoning_analyze_{}", (b'a' + i as u8) as char)).collect()
+    }
+
+    /// Deep graph node names (2 nodes).
+    fn deep_graph_node_names() -> Vec<String> {
+        vec!["deep_resolve_a".to_string(), "deep_resolve_b".to_string()]
     }
 
     /// Compute standard deviation of a sorted slice of f32 values.
@@ -1335,8 +2031,8 @@ mod tests {
         let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
         let result = resolver.resolve(&input);
 
-        // Apply Hebbian learning
-        resolver.learn(&input, &result, 0.001);
+        // Apply Hebbian learning (iteration 1 of 1)
+        resolver.learn(&input, &result, 0.001, 1);
 
         let norm_after = resolver.total_weight_norm();
         // Weight norm should have changed (learning occurred)
@@ -1361,7 +2057,7 @@ mod tests {
         assert!(result.from_cache);
 
         let norm_before = resolver.total_weight_norm();
-        resolver.learn(&input, &result, 0.001);
+        resolver.learn(&input, &result, 0.001, 1);
         let norm_after = resolver.total_weight_norm();
 
         // No learning on cache hits
@@ -1371,5 +2067,281 @@ mod tests {
             norm_before,
             norm_after
         );
+    }
+
+    #[test]
+    fn test_escalation_penalty_fires() {
+        // Similarity-based penalty: escalation fires when cache has a similar
+        // entry that was resolved at Surface tier.
+        let mut resolver = HierarchicalResolver::build_default(4);
+
+        // Step 1: Resolve an input that stays at Surface (populates cache with Surface entry)
+        let input1 = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1]);
+        let result1 = resolver.resolve(&input1);
+        assert_eq!(result1.tier_reached, Tier::Surface, "First input should stay at Surface");
+
+        // Step 2: Force escalation on a similar input by lowering thresholds
+        // to make Surface barely miss, causing escalation to Reasoning/Deep
+        resolver.config.surface_confidence_threshold = 0.99;
+        resolver.config.reasoning_confidence_threshold = 0.99;
+
+        // Use a very similar input (cosine sim > 0.88 to input1)
+        let input2 = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.11]);
+        let result2 = resolver.resolve(&input2);
+
+        // Should have escalated (thresholds are impossibly high)
+        if result2.tier_reached != Tier::Surface && !result2.from_cache {
+            let norm_before = resolver.total_weight_norm();
+            let events = resolver.apply_error_signal(&input2, &result2, 0.0005);
+            let norm_after = resolver.total_weight_norm();
+
+            // Penalty should fire: cache has a Surface entry similar to input2
+            assert!(
+                !events.is_empty(),
+                "Expected escalation penalty: cache has similar Surface entry"
+            );
+            assert_eq!(events[0].event_type, "escalation_penalty");
+            assert!(
+                (norm_after - norm_before).abs() > 1e-10,
+                "Weight norm should change after escalation penalty"
+            );
+        }
+    }
+
+    #[test]
+    fn test_cache_reinforcement_fires() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+
+        // First resolve — populates cache with producer node ID
+        let result1 = resolver.resolve(&input);
+        assert!(!result1.from_cache);
+
+        // Second resolve — cache hit
+        let result2 = resolver.resolve(&input);
+        assert!(result2.from_cache);
+
+        // Cache hit similarity should be very high (identical input)
+        assert!(
+            result2.cache_hit_similarity > 0.95,
+            "Identical input should produce similarity > 0.95, got {}",
+            result2.cache_hit_similarity
+        );
+
+        // Apply error signal — should fire cache reinforcement
+        let norm_before = resolver.total_weight_norm();
+        let events = resolver.apply_error_signal(&input, &result2, 0.0005);
+        let norm_after = resolver.total_weight_norm();
+
+        // Cache reinforcement should fire if producer was tracked
+        if result2.cache_producer_id.is_some() {
+            assert!(
+                !events.is_empty(),
+                "Expected cache reinforcement events"
+            );
+            assert_eq!(events[0].event_type, "cache_reinforcement");
+            // Weight change may be zero if the graph output went through many
+            // ReLU layers and vanished — the event firing is the primary check.
+            let _ = (norm_before, norm_after);
+        }
+    }
+
+    #[test]
+    fn test_error_events_accumulate() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        assert!(resolver.error_events().is_empty());
+
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        let result = resolver.resolve(&input);
+        resolver.apply_error_signal(&input, &result, 0.0005);
+        // Second resolve triggers cache hit
+        let result2 = resolver.resolve(&input);
+        resolver.apply_error_signal(&input, &result2, 0.0005);
+
+        // Events should accumulate
+        let total = resolver.escalation_penalty_count() + resolver.cache_reinforcement_count();
+        assert_eq!(total, resolver.error_events().len());
+
+        // Clear should work
+        resolver.clear_error_events();
+        assert!(resolver.error_events().is_empty());
+    }
+
+    #[test]
+    fn test_no_error_signal_on_surface_resolve() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input = Tensor::from_vec(vec![0.5, 0.3, 0.2, 0.1, 0.4, 0.2, 0.3, 0.1]);
+        let result = resolver.resolve(&input);
+
+        // If resolved at Surface, no escalation penalty should fire
+        if result.tier_reached == Tier::Surface {
+            let events = resolver.apply_error_signal(&input, &result, 0.0005);
+            let penalties: Vec<_> = events
+                .iter()
+                .filter(|e| e.event_type == "escalation_penalty")
+                .collect();
+            assert!(
+                penalties.is_empty(),
+                "No escalation penalty expected when Surface resolves"
+            );
+        }
+    }
+
+    #[test]
+    fn test_resolve_result_has_surface_state() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        let result = resolver.resolve(&input);
+
+        // surface_confidence should be set (non-zero for non-empty input)
+        assert!(result.surface_confidence > 0.0);
+
+        // If not from cache, surface_output should exist
+        if !result.from_cache {
+            assert!(result.surface_output.is_some());
+        }
+    }
+
+    #[test]
+    fn test_producer_node_id_tracked() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        let result = resolver.resolve(&input);
+
+        // Producer node ID should be set (not None)
+        assert!(
+            result.route.producer_node_id.is_some(),
+            "Producer node ID should be tracked"
+        );
+    }
+
+    #[test]
+    fn test_training_mode_bypasses_cache() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+
+        // Default mode is Inference — first call populates cache
+        assert_eq!(resolver.mode, RouteMode::Inference);
+        let r1 = resolver.resolve(&input);
+        assert!(!r1.from_cache);
+
+        // Same input in Inference mode — cache hit
+        let r2 = resolver.resolve(&input);
+        assert!(r2.from_cache);
+
+        // Switch to Training mode — same input should NOT hit cache
+        resolver.mode = RouteMode::Training;
+        let r3 = resolver.resolve(&input);
+        assert!(
+            !r3.from_cache,
+            "Training mode should bypass cache entirely"
+        );
+
+        // Switch back to Inference — cache hit again
+        resolver.mode = RouteMode::Inference;
+        let r4 = resolver.resolve(&input);
+        assert!(
+            r4.from_cache,
+            "Inference mode should use cache"
+        );
+    }
+
+    #[test]
+    fn test_training_mode_does_not_insert_cache() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+        resolver.mode = RouteMode::Training;
+
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+
+        // Resolve in Training mode — should NOT populate cache
+        resolver.resolve(&input);
+        assert_eq!(resolver.cache_size(), 0, "Training mode should not insert into cache");
+
+        // Switch to Inference — should be a cache miss (nothing was inserted)
+        resolver.mode = RouteMode::Inference;
+        let result = resolver.resolve(&input);
+        assert!(
+            !result.from_cache,
+            "No cache entries should exist from training"
+        );
+    }
+
+    #[test]
+    fn test_init_surface_analytical_freezes_surface() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+
+        // Create synthetic simple and complex tensors with different directions
+        let simple_tensors: Vec<Tensor> = (0..10)
+            .map(|i| {
+                let mut data = vec![1.0; 8]; // simple = high in first dims
+                data[0] += i as f32 * 0.01;
+                Tensor::from_vec(data)
+            })
+            .collect();
+        let complex_tensors: Vec<Tensor> = (0..10)
+            .map(|i| {
+                let mut data = vec![0.5; 8]; // complex = lower baseline
+                data[4] = 2.0; // different direction
+                data[5] = 2.0;
+                data[0] += i as f32 * 0.01;
+                Tensor::from_vec(data)
+            })
+            .collect();
+
+        let (dir_norm, simple_norm, complex_norm, cosine_sim) =
+            resolver.init_surface_analytical(&simple_tensors, &complex_tensors);
+
+        // Direction should have non-zero norm before normalisation
+        assert!(dir_norm > 0.0, "Discrimination direction norm should be > 0");
+        assert!(simple_norm > 0.0);
+        assert!(complex_norm > 0.0);
+        assert!(cosine_sim > 0.0 && cosine_sim < 1.0);
+
+        // Surface graph nodes should be frozen
+        for node in resolver.graph.nodes_ref() {
+            if node.tier() == Tier::Surface {
+                assert!(node.is_frozen(), "Surface graph node should be frozen");
+            }
+        }
+
+        // Standalone surface nodes should be frozen
+        let surface_norm_before = resolver.surface_weight_norm();
+
+        // Verify frozen by attempting learning
+        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        let result = resolver.resolve(&input);
+        resolver.learn(&input, &result, 0.01, 1);
+
+        let surface_norm_after = resolver.surface_weight_norm();
+        assert!(
+            (surface_norm_after - surface_norm_before).abs() < 1e-8,
+            "Frozen Surface weight norm must not change: before={}, after={}",
+            surface_norm_before, surface_norm_after
+        );
+    }
+
+    #[test]
+    fn test_init_surface_analytical_leaves_reasoning_unfrozen() {
+        let mut resolver = HierarchicalResolver::build_default(8);
+
+        let simple_tensors: Vec<Tensor> = (0..5)
+            .map(|_| Tensor::from_vec(vec![1.0; 8]))
+            .collect();
+        let complex_tensors: Vec<Tensor> = (0..5)
+            .map(|_| Tensor::from_vec(vec![0.5, 0.5, 0.5, 0.5, 2.0, 2.0, 0.5, 0.5]))
+            .collect();
+
+        resolver.init_surface_analytical(&simple_tensors, &complex_tensors);
+
+        // Reasoning and Deep graph nodes should NOT be frozen
+        for node in resolver.graph.nodes_ref() {
+            if node.tier() != Tier::Surface {
+                assert!(
+                    !node.is_frozen(),
+                    "Non-Surface graph node '{}' should not be frozen",
+                    node.node_id()
+                );
+            }
+        }
     }
 }

@@ -6,4 +6,4 @@ pub mod node;
 
 pub use edge::{ConditionalEdge, EdgeCondition, LateralCondition, LateralEdge};
 pub use engine::{RouteResult, SparseGraph, TraceStep, TraversalDirection};
-pub use node::{ComputeNode, NodeOutput};
+pub use node::{AnalyticalInit, ComputeNode, ContrastiveUpdateInfo, NodeOutput};
