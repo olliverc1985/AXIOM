@@ -108,6 +108,12 @@ pub trait ComputeNode: Send + Sync {
     fn set_frozen(&mut self, _frozen: bool) {}
     /// Analytically initialise weights toward a discrimination direction.
     fn init_analytical(&mut self, _init: &AnalyticalInit, _seed: u64) {}
+    /// Set G5 magnitude penalty parameters for Surface confidence (Phase 14).
+    ///
+    /// When set, Surface confidence is reduced by a penalty proportional to
+    /// how close the input's G5 norm is to the complex corpus mean.
+    /// Params: (g5_offset, g5_end, simple_mean_norm, complex_mean_norm, weight).
+    fn set_g5_magnitude_penalty(&mut self, _params: Option<(usize, usize, f32, f32, f32)>) {}
     /// Orthogonally initialise weights toward a specific basis direction.
     fn init_orthogonal(&mut self, _basis_vector: &[f32], _noise_scale: f32, _seed: u64) {}
     /// Return the node's mean weight direction vector (mean of weight columns).
@@ -277,6 +283,11 @@ pub struct LinearNode {
     /// When true, all weight update methods become no-ops.
     /// Used for frozen Surface discriminators with analytical initialisation.
     pub frozen: bool,
+    /// G5 magnitude penalty for Surface confidence (Phase 14).
+    /// When Some: (g5_offset, g5_end, simple_mean_norm, complex_mean_norm, weight).
+    /// Subtracts a penalty proportional to how close the input's G5 norm is to
+    /// the complex corpus mean, pushing structurally complex inputs below threshold.
+    g5_magnitude_penalty: Option<(usize, usize, f32, f32, f32)>,
 }
 
 
@@ -323,6 +334,7 @@ impl LinearNode {
             negative_count: 0,
             contrastive_lr: 0.01,
             frozen: false,
+            g5_magnitude_penalty: None,
         }
     }
 
@@ -354,6 +366,7 @@ impl LinearNode {
             negative_count: 0,
             contrastive_lr: 0.01,
             frozen: false,
+            g5_magnitude_penalty: None,
         }
     }
 
@@ -491,7 +504,26 @@ impl ComputeNode for LinearNode {
         } else {
             0.5
         };
-        let confidence = (self.base_confidence * 0.7 + cosine_sim * 0.3).clamp(0.0, 1.0);
+        let mut confidence = (self.base_confidence * 0.7 + cosine_sim * 0.3).clamp(0.0, 1.0);
+
+        // G5 magnitude penalty (Phase 14): reduce Surface confidence for
+        // inputs with high structural complexity (high G5 norm).
+        if let Some((g5_start, g5_end, simple_norm, complex_norm, weight)) =
+            self.g5_magnitude_penalty
+        {
+            let s = g5_start.min(input_slice.len());
+            let e = g5_end.min(input_slice.len());
+            if s < e && complex_norm > simple_norm + epsilon {
+                let g5_norm = input_slice[s..e]
+                    .iter()
+                    .map(|x| x * x)
+                    .sum::<f32>()
+                    .sqrt();
+                let penalty =
+                    ((g5_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
+                confidence = (confidence - penalty * weight).clamp(0.0, 1.0);
+            }
+        }
 
         let compute_cost = (self.input_dim * self.output_dim) as f32 / 1000.0;
 
@@ -701,6 +733,10 @@ impl ComputeNode for LinearNode {
 
     fn init_analytical(&mut self, init: &AnalyticalInit, seed: u64) {
         LinearNode::init_analytical(self, init, seed);
+    }
+
+    fn set_g5_magnitude_penalty(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
+        self.g5_magnitude_penalty = params;
     }
 
     fn init_orthogonal(&mut self, basis_vector: &[f32], noise_scale: f32, seed: u64) {

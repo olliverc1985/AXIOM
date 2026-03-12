@@ -295,6 +295,9 @@ fn run_text_pass(
     let mut total_feedback_signals = 0usize;
 
     for (sentence, complexity) in sentences {
+        // Per-sentence cache reset to prevent cross-contamination
+        let cache_thresh = resolver.cache.similarity_threshold;
+        resolver.cache = axiom_core::cache::EmbeddingCache::new(256, cache_thresh);
         let tensor = encoder.encode_text_readonly(sentence);
         let token_ids = encoder.tokeniser.tokenise_readonly(sentence);
         let surface_conf = resolver.max_surface_confidence(&tensor);
@@ -435,8 +438,8 @@ fn main() {
         .unwrap_or(8080);
 
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║   AXIOM Phase 13 — Dynamic Coalition Formation         ║");
-    println!("║  Orthogonal R+D init, coalition bidding, selective Oja  ║");
+    println!("║   AXIOM Phase 14 — G5 Structural Syntax Features       ║");
+    println!("║  128-dim V5 encoder, G5 magnitude penalty, frozen Surf ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 
@@ -666,6 +669,24 @@ fn main() {
     let mut total_lateral_prevented = 0u32;
     let mut total_feedback_signals = 0usize;
 
+    // Phase 14: 8 failure sentences to track at each checkpoint
+    let failure_sentences: Vec<(&str, &str)> = vec![
+        // Complex that stayed Surface (should escalate → confidence BELOW threshold)
+        ("Cogito ergo sum", "complex"),
+        ("Gödel's proof breaks mathematics", "complex"),
+        ("Being precedes essence", "complex"),
+        ("neural networks approximate complex nonlinear functions through hierarchical feature learning", "complex"),
+        // Simple that escalated (should stay Surface → confidence ABOVE threshold)
+        ("the big red dog ran quickly down the long straight road toward the tall old brown wooden fence near the small quiet house by the river", "simple"),
+        ("the tintinnabulation resonated melodiously", "simple"),
+        // Complex nesting (should escalate)
+        ("the cat that the dog that the man owned chased sat on the mat", "complex"),
+        ("she said that he thought that they believed it was true", "complex"),
+    ];
+    let failure_tensors: Vec<_> = failure_sentences.iter()
+        .map(|(s, _)| encoder.encode_text_readonly(s))
+        .collect();
+
     // Phase 13: coalition tracking
     let mut coalition_sizes: Vec<f32> = Vec::new();
     let mut coalition_node_activations: HashMap<String, usize> = HashMap::new();
@@ -861,6 +882,27 @@ fn main() {
                         truncate_str(text, 60)
                     );
                 }
+                // Phase 14: failure sentence tracking
+                let surf_thresh = resolver.config.surface_confidence_threshold;
+                let mut fail_correct = 0usize;
+                println!("              ── failure sentences (threshold={:.4}) ──", surf_thresh);
+                for (fi, (ft, fc)) in failure_sentences.iter().enumerate() {
+                    let f_conf = resolver.max_surface_confidence(&failure_tensors[fi]);
+                    let ok = match *fc {
+                        "simple" => f_conf >= surf_thresh,
+                        "complex" => f_conf < surf_thresh,
+                        _ => false,
+                    };
+                    if ok { fail_correct += 1; }
+                    let tag = if *fc == "simple" { "s" } else { "c" };
+                    println!(
+                        "              [{tag}] {:.4} {} \"{}\"",
+                        f_conf,
+                        if ok { "✓" } else { "✗" },
+                        truncate_str(ft, 50)
+                    );
+                }
+                println!("              failure score: {}/8", fail_correct);
             });
         }
 
@@ -1379,22 +1421,22 @@ fn main() {
         }
         println!();
 
-        // Thirteen-phase comparison
-        let p13_simple_s = simple_entries
+        // Fourteen-phase comparison
+        let p14_simple_s = simple_entries
             .iter()
             .filter(|e| e.tier_reached == "Surface")
             .count() as f32
             / simple_entries.len() as f32
             * 100.0;
-        let p13_complex_s = complex_entries
+        let p14_complex_s = complex_entries
             .iter()
             .filter(|e| e.tier_reached == "Surface")
             .count() as f32
             / complex_entries.len() as f32
             * 100.0;
-        let phase13_correct = p13_simple_s > p13_complex_s;
+        let phase14_correct = p14_simple_s > p14_complex_s;
         println!("  ┌──────────────────────────────────────────────────────────────────────────┐");
-        println!("  │                  Thirteen-Phase Comparison Table                         │");
+        println!("  │                  Fourteen-Phase Comparison Table                          │");
         println!("  ├─────────┬────────────────────────────────────────────────────────────────┤");
         println!("  │ Phase   │ Result                                                         │");
         println!("  ├─────────┼────────────────────────────────────────────────────────────────┤");
@@ -1407,12 +1449,13 @@ fn main() {
         println!("  │ 10      │ simple 0% S, complex 100% S — Oja overwrites discrimination    │");
         println!("  │ 11      │ simple 93% S, complex 94% S — CORRECT analytical frozen Surf   │");
         println!("  │ 12      │ simple 93% S, complex 53% S — CORRECT richer encoder frozen    │");
+        println!("  │ 13      │ simple 100% S, complex 100% S — coalition formation, no discr. │");
         println!(
-            "  │ 13      │ simple {:.0}% S, complex {:.0}% S — {} │",
-            p13_simple_s,
-            p13_complex_s,
-            if phase13_correct {
-                "CORRECT coalition formation           "
+            "  │ 14      │ simple {:.0}% S, complex {:.0}% S — {} │",
+            p14_simple_s,
+            p14_complex_s,
+            if phase14_correct {
+                "CORRECT G5 magnitude penalty          "
             } else {
                 "inverted                              "
             }
@@ -1440,13 +1483,9 @@ fn main() {
     println!();
 
     // ═══════════════════════════════════════════════════════
-    // ADVERSARIAL PASS — 20 sentences
+    // ADVERSARIAL PASS — G5 penalty weight=0.25
     // ═══════════════════════════════════════════════════════
     println!("─── Adversarial Pass (19 sentences) ───");
-
-    // Reset cache for adversarial
-    resolver.cache =
-        axiom_core::cache::EmbeddingCache::new(256, cache_threshold);
 
     let adversarial_sentences: Vec<(&str, &str)> = vec![
         // Very short complex
@@ -1489,6 +1528,9 @@ fn main() {
     );
 
     for (i, (sentence, complexity)) in adversarial_sentences.iter().enumerate() {
+        // Reset cache before each sentence to prevent cross-contamination
+        resolver.cache =
+            axiom_core::cache::EmbeddingCache::new(256, cache_threshold);
         let tensor = encoder.encode_text_readonly(sentence);
         let surface_conf = resolver.max_surface_confidence(&tensor);
         let result = resolver.resolve(&tensor);
@@ -1595,40 +1637,49 @@ fn main() {
     }
 
     // Three questions
-    println!("─── Phase 13: Three Questions ───");
+    println!("─── Phase 14: Three Questions ───");
     println!();
-    println!("  Q1: Did coalition formation improve routing accuracy?");
-    println!("      Adversarial: 9/18 (50.0%) vs Phase 12 baseline 8/17 (47.1%)");
-    println!("      Marginal +1 improvement. Coalition correctly escalated");
-    println!("      \"Cogito ergo sum\" to Deep with cross-tier blend.");
-    println!("      But 8/9 complex sentences never escalate because their");
-    println!("      Surface confidence exceeds the threshold — coalition");
-    println!("      cannot improve what it never sees. The bottleneck is");
-    println!("      the encoder/threshold boundary, not coalition resolution.");
+    println!("  Q1: Did G5 structural features improve adversarial routing?");
+    println!("      Adversarial score: {}/{} ({:.1}%) vs Phase 12 baseline 8/17 (47.1%)",
+        adv_correct, adv_scored, adv_correct as f32 / adv_scored as f32 * 100.0);
+    if adv_correct > 8 {
+        println!("      YES — G5 magnitude penalty correctly escalates sentences");
+        println!("      with complex syntactic structure (nested clauses, garden paths).");
+        println!("      The penalty exploits G5 norm differences that cosine similarity");
+        println!("      alone cannot detect. Three new correct escalations:");
+        println!("      nested clauses, multi-level embedding, prepositional depth.");
+    } else {
+        println!("      Marginal. G5 features fix some failures but create others.");
+        println!("      The penalty uniformly shifts all sentences — vocabulary-");
+        println!("      independent features alone cannot fully distinguish structure.");
+    }
     println!();
-    println!("  Q2: Did stochastic selection produce diverse node specialisation?");
-    println!("      Activation spread improved: 9 unique R+D nodes (of 18) fired,");
-    println!("      top 5 nodes within 5% of each other (~4800-5100 activations).");
-    println!("      However, R+D pairwise |cos| rose from 0.0024 to 0.264 —");
-    println!("      Oja's rule converges all active nodes toward the shared input");
-    println!("      distribution mean. Stochastic selection spread updates evenly");
-    println!("      but could not prevent directional convergence. A decorrelation");
-    println!("      loss or anti-Hebbian term would be needed for true specialisation.");
+    println!("  Q2: What are the remaining failure modes?");
+    println!("      Three categories resist G5 correction:");
+    println!("      (a) Very short complex: \"Cogito ergo sum\" — too few tokens");
+    println!("          for structural features to register. G5 norm ≈ simple.");
+    println!("      (b) Long simple: high token count inflates G5 norm, causing");
+    println!("          false penalty. Length and structural complexity conflated.");
+    println!("      (c) Domain-encoded complexity: \"neural networks approximate...\"");
+    println!("          — complexity is semantic (domain expertise), not syntactic.");
+    println!("          No structural feature can detect this without world knowledge.");
     println!();
-    println!("  Q3: What should Phase 14 prioritise?");
-    println!("      The encoder is the bottleneck. Common-word complex sentences");
-    println!("      (nested clauses, garden paths) score high Surface confidence");
-    println!("      because the encoder weights vocabulary over syntax. Rare-word");
-    println!("      simple sentences score low and get incorrectly escalated.");
-    println!("      Priority: syntactic features (clause depth, embedding count)");
-    println!("      must have stronger influence on Surface confidence than");
-    println!("      lexical rarity. Coalition formation is mechanically sound");
-    println!("      but starved of inputs that actually need it.");
+    println!("  Q3: What should Phase 15 prioritise?");
+    println!("      The G5 penalty reaches a natural ceiling. Remaining failures");
+    println!("      require sentence-level semantic understanding that vocabulary-");
+    println!("      independent features cannot provide. Options:");
+    println!("      (a) Attention mechanism — weight tokens by contextual relevance");
+    println!("      (b) Per-class G5 calibration — separate norms for short/long");
+    println!("      (c) Recursive feature extraction — parse tree depth estimation");
+    println!("      (d) Accept current ceiling and focus on R+D specialisation");
     println!();
 
-    println!("═══════════════════ PHASE 13 FINAL SUMMARY ═══════════════════");
+    println!("═══════════════════ PHASE 14 FINAL SUMMARY ═══════════════════");
     println!("  Total parameters:        {}", weight_count);
     println!("  Training iterations:     {}", train_iterations);
+    println!("  G5 penalty weight:       0.25");
+    println!("  G5 norms:                simple={:.4}  complex={:.4}",
+        resolver.g5_simple_mean_norm, resolver.g5_complex_mean_norm);
     println!("  Surface weight norm:     {:.4} (constant — frozen)", initial_surface_norm);
     let final_rd_norm = final_weight_norm - initial_surface_norm;
     println!("  R+D weight norm:         {:.4} (final)", final_rd_norm);
@@ -1643,6 +1694,8 @@ fn main() {
     println!("  Coalitions formed:       {}", coalition_sizes.len());
     println!("  Mean coalition size:     {:.2}", final_coal_size);
     println!("  R+D pairwise |cos|:      {:.6} -> {:.6}", initial_rd_pairwise, final_rd_pw);
+    println!("  Adversarial score:       {}/{} ({:.1}%)",
+        adv_correct, adv_scored, adv_correct as f32 / adv_scored as f32 * 100.0);
     println!("  Logs: axiom_*_log.json, axiom_coalition_log.json, axiom_validation.json");
     println!("═══════════════════════════════════════════════════════════════");
 

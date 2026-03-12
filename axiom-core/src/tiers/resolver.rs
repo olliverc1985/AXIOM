@@ -151,6 +151,10 @@ pub struct HierarchicalResolver {
     coalition_log: Vec<Coalition>,
     /// PRNG state for stochastic coalition selection (xorshift64).
     coalition_rng: u64,
+    /// G5 structural feature norm of simple corpus mean (for persistence).
+    pub g5_simple_mean_norm: f32,
+    /// G5 structural feature norm of complex corpus mean (for persistence).
+    pub g5_complex_mean_norm: f32,
 }
 
 /// An error signal event for diagnostic logging.
@@ -253,6 +257,8 @@ impl HierarchicalResolver {
             coalition_max_size: 2,
             coalition_log: Vec::new(),
             coalition_rng: 12345,
+            g5_simple_mean_norm: 0.0,
+            g5_complex_mean_norm: 0.0,
         }
     }
 
@@ -1264,13 +1270,15 @@ impl HierarchicalResolver {
         simple_tensors: &[Tensor],
         complex_tensors: &[Tensor],
     ) -> (f32, f32, f32, f32) {
+        use crate::input::encoder::{G5_DIM, G5_OFFSET};
+
         let dim = if let Some(t) = simple_tensors.first() {
             t.data.len()
         } else {
             return (0.0, 0.0, 0.0, 0.0);
         };
 
-        // Compute simple_mean
+        // Compute full 128-dim simple_mean
         let mut simple_mean = vec![0.0f32; dim];
         for t in simple_tensors {
             for (i, v) in t.data.iter().enumerate() {
@@ -1284,7 +1292,7 @@ impl HierarchicalResolver {
             *v /= simple_n;
         }
 
-        // Compute complex_mean
+        // Compute full 128-dim complex_mean
         let mut complex_mean = vec![0.0f32; dim];
         for t in complex_tensors {
             for (i, v) in t.data.iter().enumerate() {
@@ -1300,15 +1308,9 @@ impl HierarchicalResolver {
 
         // Weight direction = simple_mean (L2 normalised).
         //
-        // Using simple_mean directly as the weight direction rather than
-        // simple_mean - complex_mean. The difference vector is nearly orthogonal
-        // to both mean vectors (both have negative dot product with it) because
-        // complex_mean has larger magnitude while cosine(simple, complex) ≈ 0.83.
-        // After clamping cosine similarity to [0, 1], discrimination is lost.
-        //
-        // simple_mean as weight direction works because:
-        //   cos(simple_input, simple_mean) > cos(complex_input, simple_mean)
-        // — simple inputs are directionally closer to simple_mean.
+        // Full 128-dim direction as in Phase 13. Cosine-based confidence
+        // uses the full vector. G5 magnitude penalty (set below) provides
+        // the structural discrimination signal.
         let mut direction = simple_mean.clone();
 
         let dir_norm = direction.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -1329,16 +1331,47 @@ impl HierarchicalResolver {
             0.0
         };
 
+        // Compute G5 subvector norms for magnitude penalty
+        let g5_end = (G5_OFFSET + G5_DIM).min(dim);
+        let g5_simple_norm = if G5_OFFSET < dim {
+            simple_mean[G5_OFFSET..g5_end]
+                .iter()
+                .map(|v| v * v)
+                .sum::<f32>()
+                .sqrt()
+        } else {
+            0.0
+        };
+        let g5_complex_norm = if G5_OFFSET < dim {
+            complex_mean[G5_OFFSET..g5_end]
+                .iter()
+                .map(|v| v * v)
+                .sum::<f32>()
+                .sqrt()
+        } else {
+            0.0
+        };
+
+        eprintln!(
+            "G5 penalty norms: simple={:.4}, complex={:.4}, gap={:.4}",
+            g5_simple_norm,
+            g5_complex_norm,
+            g5_complex_norm - g5_simple_norm
+        );
+
         let init = crate::graph::node::AnalyticalInit {
             discrimination_direction: direction,
             noise_scale: 0.1,
         };
+
+        let g5_penalty = Some((G5_OFFSET, g5_end, g5_simple_norm, g5_complex_norm, 0.25));
 
         // Apply to graph nodes (Surface tier only)
         for (i, node) in self.graph.nodes_mut().iter_mut().enumerate() {
             if node.tier() == Tier::Surface {
                 node.init_analytical(&init, 42 + i as u64);
                 node.set_frozen(true);
+                node.set_g5_magnitude_penalty(g5_penalty);
             }
         }
 
@@ -1346,15 +1379,40 @@ impl HierarchicalResolver {
         for (i, node) in self.surface_nodes.iter_mut().enumerate() {
             node.init_analytical(&init, 1000 + i as u64);
             node.set_frozen(true);
+            node.set_g5_magnitude_penalty(g5_penalty);
         }
 
         // Apply to lateral nodes (these are Surface-tier)
         for (i, node) in self.lateral_nodes.iter_mut().enumerate() {
             node.init_analytical(&init, 2000 + i as u64);
             node.set_frozen(true);
+            node.set_g5_magnitude_penalty(g5_penalty);
         }
 
+        // Store G5 norms for persistence
+        self.g5_simple_mean_norm = g5_simple_norm;
+        self.g5_complex_mean_norm = g5_complex_norm;
+
         (dir_norm, simple_norm, complex_norm, cosine_sim)
+    }
+
+    /// Update the G5 magnitude penalty weight on all Surface nodes.
+    pub fn set_g5_penalty_weight(&mut self, weight: f32) {
+        let g5_simple = self.g5_simple_mean_norm;
+        let g5_complex = self.g5_complex_mean_norm;
+        let g5_end = crate::input::encoder::G5_OFFSET + crate::input::encoder::G5_DIM;
+        let params = Some((crate::input::encoder::G5_OFFSET, g5_end, g5_simple, g5_complex, weight));
+        for node in self.graph.nodes_mut() {
+            if node.tier() == Tier::Surface {
+                node.set_g5_magnitude_penalty(params);
+            }
+        }
+        for node in &mut self.surface_nodes {
+            node.set_g5_magnitude_penalty(params);
+        }
+        for node in &mut self.lateral_nodes {
+            node.set_g5_magnitude_penalty(params);
+        }
     }
 
     /// Weight norm of Surface-tier nodes only (graph + standalone + lateral).
@@ -2740,20 +2798,20 @@ mod tests {
 
     #[test]
     fn test_init_surface_analytical_freezes_surface() {
-        let mut resolver = HierarchicalResolver::build_default(8);
+        let mut resolver = HierarchicalResolver::build_default(128);
 
-        // Create synthetic simple and complex tensors with different directions
+        // Create 128-dim tensors with different directions
         let simple_tensors: Vec<Tensor> = (0..10)
             .map(|i| {
-                let mut data = vec![1.0; 8]; // simple = high in first dims
+                let mut data = vec![1.0; 128];
                 data[0] += i as f32 * 0.01;
                 Tensor::from_vec(data)
             })
             .collect();
         let complex_tensors: Vec<Tensor> = (0..10)
             .map(|i| {
-                let mut data = vec![0.5; 8]; // complex = lower baseline
-                data[4] = 2.0; // different direction
+                let mut data = vec![0.5; 128];
+                data[4] = 2.0;
                 data[5] = 2.0;
                 data[0] += i as f32 * 0.01;
                 Tensor::from_vec(data)
@@ -2780,7 +2838,7 @@ mod tests {
         let surface_norm_before = resolver.surface_weight_norm();
 
         // Verify frozen by attempting learning
-        let input = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1, 0.8, 0.2, 0.6, 0.4]);
+        let input = Tensor::from_vec(vec![1.0; 128]);
         let result = resolver.resolve(&input);
         resolver.learn(&input, &result, 0.01, 1);
 
@@ -2794,13 +2852,28 @@ mod tests {
 
     #[test]
     fn test_init_surface_analytical_leaves_reasoning_unfrozen() {
-        let mut resolver = HierarchicalResolver::build_default(8);
+        use crate::input::encoder::{G5_DIM, G5_OFFSET};
+
+        let mut resolver = HierarchicalResolver::build_default(128);
 
         let simple_tensors: Vec<Tensor> = (0..5)
-            .map(|_| Tensor::from_vec(vec![1.0; 8]))
+            .map(|_| {
+                let mut data = vec![1.0; 128];
+                for d in G5_OFFSET..(G5_OFFSET + G5_DIM) {
+                    data[d] = 0.2;
+                }
+                Tensor::from_vec(data)
+            })
             .collect();
         let complex_tensors: Vec<Tensor> = (0..5)
-            .map(|_| Tensor::from_vec(vec![0.5, 0.5, 0.5, 0.5, 2.0, 2.0, 0.5, 0.5]))
+            .map(|_| {
+                let mut data = vec![1.0; 128];
+                for d in G5_OFFSET..(G5_OFFSET + G5_DIM) {
+                    data[d] = 0.9;
+                }
+                data[G5_OFFSET + 2] = 2.0;
+                Tensor::from_vec(data)
+            })
             .collect();
 
         resolver.init_surface_analytical(&simple_tensors, &complex_tensors);

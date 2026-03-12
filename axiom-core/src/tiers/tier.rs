@@ -73,6 +73,14 @@ pub struct AxiomConfig {
     pub reasoning_base_confidence: f32,
     /// Cosine similarity threshold for embedding cache hits.
     pub cache_similarity_threshold: f32,
+    /// G5 structural feature norm of the simple corpus mean (Phase 14).
+    /// Used for Surface confidence magnitude penalty.
+    #[serde(default)]
+    pub g5_simple_mean_norm: f32,
+    /// G5 structural feature norm of the complex corpus mean (Phase 14).
+    /// Used for Surface confidence magnitude penalty.
+    #[serde(default)]
+    pub g5_complex_mean_norm: f32,
     /// Human-readable explanation of why these values were chosen.
     pub rationale: String,
 }
@@ -84,6 +92,8 @@ impl Default for AxiomConfig {
             reasoning_confidence_threshold: 0.70,
             reasoning_base_confidence: 0.72,
             cache_similarity_threshold: 0.92,
+            g5_simple_mean_norm: 0.0,
+            g5_complex_mean_norm: 0.0,
             rationale: "defaults".to_string(),
         }
     }
