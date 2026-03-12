@@ -1396,6 +1396,89 @@ impl HierarchicalResolver {
         (dir_norm, simple_norm, complex_norm, cosine_sim)
     }
 
+    /// Compute the L2 norm of the G5 structural syntax subvector.
+    pub fn compute_g5_norm(&self, tensor: &Tensor) -> f32 {
+        use crate::input::encoder::{G5_DIM, G5_OFFSET};
+        let data = &tensor.data;
+        let s = G5_OFFSET.min(data.len());
+        let e = (G5_OFFSET + G5_DIM).min(data.len());
+        if s >= e { return 0.0; }
+        data[s..e].iter().map(|x| x * x).sum::<f32>().sqrt()
+    }
+
+    /// Split text on sentence-ending punctuation (. ! ?) and return trimmed chunks.
+    /// Filters out chunks with fewer than `min_tokens` whitespace-delimited words.
+    fn split_sentences(text: &str, min_tokens: usize) -> Vec<String> {
+        let mut sentences = Vec::new();
+        let mut current = String::new();
+        for ch in text.chars() {
+            current.push(ch);
+            if ch == '.' || ch == '!' || ch == '?' {
+                let trimmed = current.trim().to_string();
+                if !trimmed.is_empty() {
+                    let token_count = trimmed.split_whitespace().count();
+                    if token_count >= min_tokens {
+                        sentences.push(trimmed);
+                    }
+                }
+                current.clear();
+            }
+        }
+        let trimmed = current.trim().to_string();
+        if !trimmed.is_empty() {
+            let token_count = trimmed.split_whitespace().count();
+            if token_count >= min_tokens {
+                sentences.push(trimmed);
+            }
+        }
+        sentences
+    }
+
+    /// Resolve text with sentence chunking.
+    ///
+    /// Splits input on sentence boundaries (./!/?), filters chunks < 3 tokens,
+    /// encodes each independently, returns mean confidence, mean G5 norm, and
+    /// the ResolveResult from the chunk with highest confidence.
+    /// Single sentences are unaffected — they produce exactly one chunk.
+    pub fn resolve_text(
+        &mut self,
+        encoder: &crate::input::encoder::Encoder,
+        text: &str,
+    ) -> (f32, f32, ResolveResult) {
+        let chunks = Self::split_sentences(text, 3);
+
+        if chunks.len() <= 1 {
+            let tensor = encoder.encode_text_readonly(text);
+            let g5 = self.compute_g5_norm(&tensor);
+            let conf = self.max_surface_confidence(&tensor);
+            let result = self.resolve(&tensor);
+            return (conf, g5, result);
+        }
+
+        let mut conf_sum = 0.0f32;
+        let mut g5_sum = 0.0f32;
+        let mut best_result: Option<ResolveResult> = None;
+        let mut best_conf = f32::NEG_INFINITY;
+
+        for chunk in &chunks {
+            let tensor = encoder.encode_text_readonly(chunk);
+            let g5 = self.compute_g5_norm(&tensor);
+            let conf = self.max_surface_confidence(&tensor);
+            let result = self.resolve(&tensor);
+
+            conf_sum += conf;
+            g5_sum += g5;
+
+            if result.route.confidence > best_conf {
+                best_conf = result.route.confidence;
+                best_result = Some(result);
+            }
+        }
+
+        let n = chunks.len() as f32;
+        (conf_sum / n, g5_sum / n, best_result.unwrap())
+    }
+
     /// Update the G5 magnitude penalty weight on all Surface nodes.
     pub fn set_g5_penalty_weight(&mut self, weight: f32) {
         let g5_simple = self.g5_simple_mean_norm;
@@ -2224,7 +2307,11 @@ impl HierarchicalResolver {
             }
         }
 
-        let wrapper = serde_json::json!({ "nodes": nodes });
+        let wrapper = serde_json::json!({
+            "nodes": nodes,
+            "g5_simple_mean_norm": self.g5_simple_mean_norm,
+            "g5_complex_mean_norm": self.g5_complex_mean_norm,
+        });
         let json = serde_json::to_string(&wrapper)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         std::fs::write(path, json)
@@ -2271,6 +2358,14 @@ impl HierarchicalResolver {
             if let Some(data) = weight_map.get(node.node_id()) {
                 node.load_weights_data(data);
             }
+        }
+
+        // Load G5 penalty norms (backward-compatible: absent keys default to 0.0)
+        if let Some(v) = wrapper.get("g5_simple_mean_norm").and_then(|v| v.as_f64()) {
+            self.g5_simple_mean_norm = v as f32;
+        }
+        if let Some(v) = wrapper.get("g5_complex_mean_norm").and_then(|v| v.as_f64()) {
+            self.g5_complex_mean_norm = v as f32;
         }
 
         Ok(())
@@ -3345,6 +3440,122 @@ mod tests {
             all_node_ids.len() >= 3,
             "Expected at least 3 unique nodes across 100 calls, got {}",
             all_node_ids.len()
+        );
+    }
+
+    #[test]
+    fn test_g5_penalty_roundtrip() {
+        // Verify G5 penalty norms survive save/load and produce identical confidences.
+        use crate::input::{Encoder, Tokeniser};
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        let mut tokeniser = Tokeniser::default_tokeniser();
+
+        let simple = ["the cat sat on the mat", "the dog runs fast", "birds fly south"];
+        let complex = [
+            "the recursive nature of self-referential systems creates emergent properties",
+            "quantum entanglement challenges classical notions of locality and causality",
+        ];
+        for s in simple.iter().chain(complex.iter()) {
+            tokeniser.tokenise(s);
+        }
+        let encoder = Encoder::new(128, tokeniser);
+
+        let simple_t: Vec<Tensor> = simple.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = complex.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.set_g5_penalty_weight(0.25);
+
+        // Record confidences before save
+        let simple_input = encoder.encode_text_readonly("the cat sat on the mat");
+        let complex_input = encoder.encode_text_readonly(
+            "the recursive nature of self-referential systems creates emergent properties"
+        );
+        let orig_simple_conf = resolver.max_surface_confidence(&simple_input);
+        let orig_complex_conf = resolver.max_surface_confidence(&complex_input);
+
+        // Save
+        let path = "/tmp/axiom_g5_roundtrip_test.json";
+        resolver.save_all_weights(path).expect("save failed");
+
+        // Load into a fresh resolver
+        let mut resolver2 = HierarchicalResolver::build_with_axiom_config(128, &config);
+        resolver2.load_all_weights(path).expect("load failed");
+        resolver2.set_g5_penalty_weight(0.25);
+
+        let loaded_simple_conf = resolver2.max_surface_confidence(&simple_input);
+        let loaded_complex_conf = resolver2.max_surface_confidence(&complex_input);
+
+        std::fs::remove_file(path).ok();
+
+        eprintln!("G5 roundtrip: simple {:.6} → {:.6}, complex {:.6} → {:.6}",
+            orig_simple_conf, loaded_simple_conf,
+            orig_complex_conf, loaded_complex_conf);
+
+        assert!(
+            (orig_simple_conf - loaded_simple_conf).abs() < 1e-5,
+            "Simple conf mismatch: {:.6} vs {:.6}", orig_simple_conf, loaded_simple_conf
+        );
+        assert!(
+            (orig_complex_conf - loaded_complex_conf).abs() < 1e-5,
+            "Complex conf mismatch: {:.6} vs {:.6}", orig_complex_conf, loaded_complex_conf
+        );
+        // G5 norms must be non-zero after load
+        assert!(resolver2.g5_simple_mean_norm > 0.0, "g5_simple_mean_norm not loaded");
+        assert!(resolver2.g5_complex_mean_norm > 0.0, "g5_complex_mean_norm not loaded");
+    }
+
+    #[test]
+    fn test_sentence_chunking_g5_norm_ordering() {
+        // 5 concatenated simple sentences should produce lower mean G5 norm
+        // than 5 concatenated complex sentences after chunking.
+        use crate::input::{Encoder, Tokeniser};
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        let mut tokeniser = Tokeniser::default_tokeniser();
+
+        let simple_sents = [
+            "The cat sat on the mat.",
+            "The dog runs fast.",
+            "Birds fly south in winter.",
+            "Water flows downhill.",
+            "The sky is blue.",
+        ];
+        let complex_sents = [
+            "The recursive nature of self-referential systems creates emergent properties that resist reduction.",
+            "Quantum entanglement challenges classical notions of locality and causality.",
+            "Consciousness remains an unsolved problem at the intersection of neuroscience and philosophy.",
+            "The boundary between deterministic chaos and true randomness has profound implications.",
+            "Emergence in complex adaptive systems suggests that reductionist explanations are fundamentally insufficient.",
+        ];
+        for s in simple_sents.iter().chain(complex_sents.iter()) {
+            tokeniser.tokenise(s);
+        }
+        let encoder = Encoder::new(128, tokeniser);
+
+        // Analytical init so G5 features are meaningful
+        let simple_t: Vec<Tensor> = simple_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = complex_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.mode = RouteMode::Training;
+
+        let simple_paragraph = simple_sents.join(" ");
+        let complex_paragraph = complex_sents.join(" ");
+
+        let (_, simple_mean_g5, _) = resolver.resolve_text(&encoder, &simple_paragraph);
+        let (_, complex_mean_g5, _) = resolver.resolve_text(&encoder, &complex_paragraph);
+
+        eprintln!(
+            "Chunking test: simple_mean_g5={:.4}, complex_mean_g5={:.4}",
+            simple_mean_g5, complex_mean_g5
+        );
+
+        assert!(
+            simple_mean_g5 < complex_mean_g5,
+            "Expected simple mean G5 ({:.4}) < complex mean G5 ({:.4})",
+            simple_mean_g5, complex_mean_g5
         );
     }
 }
