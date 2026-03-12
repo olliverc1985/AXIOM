@@ -1749,6 +1749,93 @@ impl HierarchicalResolver {
                 .map(|n| n.weight_count())
                 .sum::<usize>()
     }
+
+    /// Save all node weights to a JSON file for persistence.
+    ///
+    /// Collects weight data from every trainable node (graph, surface,
+    /// reasoning, deep, lateral) and writes to the given path.
+    pub fn save_all_weights(&self, path: &str) -> std::io::Result<()> {
+        use crate::graph::node::NodeWeightsData;
+
+        let mut nodes: Vec<NodeWeightsData> = Vec::new();
+
+        for node in self.graph.nodes_ref() {
+            if let Some(data) = node.save_weights_data() {
+                nodes.push(data);
+            }
+        }
+        for node in &self.surface_nodes {
+            if let Some(data) = node.save_weights_data() {
+                nodes.push(data);
+            }
+        }
+        for node in &self.reasoning_nodes {
+            if let Some(data) = node.save_weights_data() {
+                nodes.push(data);
+            }
+        }
+        for node in &self.deep_nodes {
+            if let Some(data) = node.save_weights_data() {
+                nodes.push(data);
+            }
+        }
+        for node in &self.lateral_nodes {
+            if let Some(data) = node.save_weights_data() {
+                nodes.push(data);
+            }
+        }
+
+        let wrapper = serde_json::json!({ "nodes": nodes });
+        let json = serde_json::to_string(&wrapper)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        std::fs::write(path, json)
+    }
+
+    /// Load all node weights from a JSON file.
+    ///
+    /// Matches nodes by ID — only updates weights where the ID and dimensions match.
+    pub fn load_all_weights(&mut self, path: &str) -> std::io::Result<()> {
+        use crate::graph::node::NodeWeightsData;
+
+        let data = std::fs::read_to_string(path)?;
+        let wrapper: serde_json::Value = serde_json::from_str(&data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let nodes: Vec<NodeWeightsData> = serde_json::from_value(
+            wrapper.get("nodes").cloned().unwrap_or_default(),
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        let weight_map: std::collections::HashMap<&str, &NodeWeightsData> =
+            nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+
+        for node in self.graph.nodes_mut() {
+            if let Some(data) = weight_map.get(node.node_id()) {
+                node.load_weights_data(data);
+            }
+        }
+        for node in &mut self.surface_nodes {
+            if let Some(data) = weight_map.get(node.node_id()) {
+                node.load_weights_data(data);
+            }
+        }
+        for node in &mut self.reasoning_nodes {
+            if let Some(data) = weight_map.get(node.node_id()) {
+                node.load_weights_data(data);
+            }
+        }
+        for node in &mut self.deep_nodes {
+            if let Some(data) = weight_map.get(node.node_id()) {
+                node.load_weights_data(data);
+            }
+        }
+        for node in &mut self.lateral_nodes {
+            if let Some(data) = weight_map.get(node.node_id()) {
+                node.load_weights_data(data);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

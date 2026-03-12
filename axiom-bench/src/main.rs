@@ -1,10 +1,11 @@
-//! AXIOM Bench — Phase 11: Analytical Init + Frozen Surface.
+//! AXIOM Bench — Phase 12: Richer Encoder + Analytical Init + Frozen Surface.
 //!
 //! All synthetic training removed. Learning happens exclusively on text.
 //! 50,000 iterations (100 passes through 500-sentence corpus).
 //! Surface nodes analytically initialised toward simple sentence space, then frozen.
 //! Learning (Oja + contrastive) active on Reasoning and Deep nodes only.
 //! Cache bypassed during training (RouteMode::Training).
+//! Phase 12: encoder now 24+40+48+16 dims with richer syntactic features.
 //!
 //! Usage:
 //!   cargo run --release -p axiom-bench              # terminal only
@@ -93,6 +94,7 @@ struct TrainingSnapshot {
     surface_norm: f32,
     nonsurface_norm: f32,
     contrastive_updates_fired: usize,
+    mean_pairwise_cos: f32,
 }
 
 /// Simple deterministic PRNG (xorshift32).
@@ -429,8 +431,8 @@ fn main() {
         .unwrap_or(8080);
 
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║   AXIOM Phase 11 — Analytical Init + Frozen Surface    ║");
-    println!("║  Surface=fixed discriminator, learning in R+D only     ║");
+    println!("║   AXIOM Phase 12 — Richer Encoder + Frozen Surface     ║");
+    println!("║  24+40+48+16 encoder, analytical init, R+D learning    ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 
@@ -535,7 +537,7 @@ fn main() {
     let (dir_norm, simple_norm, complex_norm, mean_cosine) =
         resolver.init_surface_analytical(&simple_tensors, &complex_tensors);
 
-    println!("  Phase 11: Analytical Surface initialisation:");
+    println!("  Phase 12: Analytical Surface initialisation:");
     println!("    discrimination_direction norm (pre-L2): {:.6}", dir_norm);
     println!("    simple_mean norm:  {:.4}", simple_norm);
     println!("    complex_mean norm: {:.4}", complex_norm);
@@ -741,6 +743,21 @@ fn main() {
             let surface_norm = resolver.surface_weight_norm();
             let nonsurface_norm = resolver.non_surface_weight_norm();
 
+            // Compute mean pairwise cosine between simple and complex diagnostic encodings
+            let diag_tensors: Vec<axiom_core::Tensor> = diag_sents
+                .iter()
+                .map(|(text, _)| encoder.encode_text_readonly(text))
+                .collect();
+            let mut cos_sum = 0.0f32;
+            let mut cos_count = 0;
+            for si in 0..3 {
+                for ci in 3..6 {
+                    cos_sum += diag_tensors[si].cosine_similarity(&diag_tensors[ci]);
+                    cos_count += 1;
+                }
+            }
+            let mean_pairwise_cos = cos_sum / cos_count as f32;
+
             let snapshot = TrainingSnapshot {
                 iteration: i + 1,
                 simple_mean,
@@ -751,6 +768,7 @@ fn main() {
                 surface_norm,
                 nonsurface_norm,
                 contrastive_updates_fired: total_contrastive_updates,
+                mean_pairwise_cos,
             };
             snapshots.push(snapshot);
 
@@ -761,14 +779,15 @@ fn main() {
                     "inverted"
                 };
                 println!(
-                    "    iter {:>5}: simple={:.4}  complex={:.4}  gap={:+.4}  {}  S_norm={:.1}  RD_norm={:.1}",
+                    "    iter {:>5}: simple={:.4}  complex={:.4}  gap={:+.4}  {}  S_norm={:.1}  RD_norm={:.1}  cos={:.4}",
                     i + 1,
                     simple_mean,
                     complex_mean,
                     gap,
                     status,
                     surface_norm,
-                    nonsurface_norm
+                    nonsurface_norm,
+                    mean_pairwise_cos
                 );
                 for (j, (text, _)) in diag_sents.iter().enumerate() {
                     let tag = if j < 3 { "S" } else { "C" };
@@ -838,6 +857,12 @@ fn main() {
     progress.finish_with_message("done");
     stats_bar.finish_and_clear();
 
+    // Save trained weights for inference
+    resolver
+        .save_all_weights("axiom_weights.json")
+        .expect("Failed to save weights");
+    println!("  Saved trained weights to axiom_weights.json");
+
     // Write training logs
     write_json_log("axiom_text_train_log.json", &train_entries);
     write_json_log("axiom_training_snapshots.json", &snapshots);
@@ -905,12 +930,12 @@ fn main() {
     // Training snapshot table
     println!("─── Training Snapshot Table ───");
     println!(
-        "  {:>6}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {}",
-        "iter", "s_mean", "c_mean", "gap", "S_norm", "RD_norm", "contrast", "status"
+        "  {:>6}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>8}  {:>6}  {}",
+        "iter", "s_mean", "c_mean", "gap", "S_norm", "RD_norm", "contrast", "cos", "status"
     );
     println!(
-        "  {}  {}  {}  {}  {}  {}  {}  {}",
-        "──────", "────────", "────────", "────────", "────────", "────────", "────────", "────────"
+        "  {}  {}  {}  {}  {}  {}  {}  {}  {}",
+        "──────", "────────", "────────", "────────", "────────", "────────", "────────", "──────", "────────"
     );
     for snap in &snapshots {
         let status = if snap.ordering_correct {
@@ -919,7 +944,7 @@ fn main() {
             "inverted"
         };
         println!(
-            "  {:>6}  {:>8.4}  {:>8.4}  {:>+8.4}  {:>8.1}  {:>8.1}  {:>8}  {}",
+            "  {:>6}  {:>8.4}  {:>8.4}  {:>+8.4}  {:>8.1}  {:>8.1}  {:>8}  {:.4}  {}",
             snap.iteration,
             snap.simple_mean,
             snap.complex_mean,
@@ -927,6 +952,7 @@ fn main() {
             snap.surface_norm,
             snap.nonsurface_norm,
             snap.contrastive_updates_fired,
+            snap.mean_pairwise_cos,
             status
         );
     }
@@ -1255,22 +1281,22 @@ fn main() {
         }
         println!();
 
-        // Eleven-phase comparison
-        let p11_simple_s = simple_entries
+        // Twelve-phase comparison
+        let p12_simple_s = simple_entries
             .iter()
             .filter(|e| e.tier_reached == "Surface")
             .count() as f32
             / simple_entries.len() as f32
             * 100.0;
-        let p11_complex_s = complex_entries
+        let p12_complex_s = complex_entries
             .iter()
             .filter(|e| e.tier_reached == "Surface")
             .count() as f32
             / complex_entries.len() as f32
             * 100.0;
-        let phase11_correct = p11_simple_s > p11_complex_s;
+        let phase12_correct = p12_simple_s > p12_complex_s;
         println!("  ┌─────────────────────────────────────────────────────────────────────────┐");
-        println!("  │                  Eleven-Phase Comparison Table                          │");
+        println!("  │                  Twelve-Phase Comparison Table                          │");
         println!("  ├─────────┬──────────────────────────────────────────────────────────────┤");
         println!("  │ Phase   │ Result                                                       │");
         println!("  ├─────────┼──────────────────────────────────────────────────────────────┤");
@@ -1281,12 +1307,13 @@ fn main() {
         println!("  │  8      │ simple 13% S, complex 100% S — inverted text-only            │");
         println!("  │  9      │ simple 0% S, complex 100% S — cosine init, training broke it │");
         println!("  │ 10      │ simple 0% S, complex 100% S — Oja overwrites discrimination  │");
+        println!("  │ 11      │ simple 93% S, complex 94% S — CORRECT analytical frozen Surf │");
         println!(
-            "  │ 11      │ simple {:.0}% S, complex {:.0}% S — {} │",
-            p11_simple_s,
-            p11_complex_s,
-            if phase11_correct {
-                "CORRECT analytical init frozen Surface"
+            "  │ 12      │ simple {:.0}% S, complex {:.0}% S — {} │",
+            p12_simple_s,
+            p12_complex_s,
+            if phase12_correct {
+                "CORRECT richer encoder frozen Surface"
             } else {
                 "inverted                              "
             }

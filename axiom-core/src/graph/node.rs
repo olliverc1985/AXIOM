@@ -108,6 +108,12 @@ pub trait ComputeNode: Send + Sync {
     fn set_frozen(&mut self, _frozen: bool) {}
     /// Analytically initialise weights toward a discrimination direction.
     fn init_analytical(&mut self, _init: &AnalyticalInit, _seed: u64) {}
+    /// Serialize this node's weights for persistence. Returns None for non-trainable nodes.
+    fn save_weights_data(&self) -> Option<NodeWeightsData> {
+        None
+    }
+    /// Load weights from serialized data (matched by node ID).
+    fn load_weights_data(&mut self, _data: &NodeWeightsData) {}
 }
 
 /// Diagnostic info returned from a contrastive update.
@@ -129,6 +135,30 @@ pub struct ContrastiveUpdateInfo {
     pub positive_mean_norm: f32,
     /// L2 norm of the negative mean vector.
     pub negative_mean_norm: f32,
+}
+
+/// Serializable weight data for a single node.
+///
+/// Used by `save_all_weights()` / `load_all_weights()` to persist trained
+/// models to disk. The inference binary loads these to skip retraining.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeWeightsData {
+    /// Node identifier (must match for loading).
+    pub id: String,
+    /// Flattened weight matrix.
+    pub weights: Vec<f32>,
+    /// Bias vector.
+    pub bias: Vec<f32>,
+    /// Input dimension.
+    pub input_dim: usize,
+    /// Output dimension.
+    pub output_dim: usize,
+    /// Tier name (Surface, Reasoning, Deep).
+    pub tier: String,
+    /// Base confidence value.
+    pub base_confidence: f32,
+    /// Whether this node is frozen.
+    pub frozen: bool,
 }
 
 /// Parameters for analytical weight initialisation.
@@ -573,6 +603,29 @@ impl ComputeNode for LinearNode {
     fn init_analytical(&mut self, init: &AnalyticalInit, seed: u64) {
         LinearNode::init_analytical(self, init, seed);
     }
+
+    fn save_weights_data(&self) -> Option<NodeWeightsData> {
+        Some(NodeWeightsData {
+            id: self.id.clone(),
+            weights: self.weights.data.clone(),
+            bias: self.bias.data.clone(),
+            input_dim: self.input_dim,
+            output_dim: self.output_dim,
+            tier: format!("{:?}", self.node_tier),
+            base_confidence: self.base_confidence,
+            frozen: self.frozen,
+        })
+    }
+
+    fn load_weights_data(&mut self, data: &NodeWeightsData) {
+        if data.id == self.id && data.weights.len() == self.weights.data.len()
+            && data.bias.len() == self.bias.data.len()
+        {
+            self.weights.data.clone_from(&data.weights);
+            self.bias.data.clone_from(&data.bias);
+            self.frozen = data.frozen;
+        }
+    }
 }
 
 /// A simple aggregation node that reduces input dimensionality by averaging chunks.
@@ -992,6 +1045,30 @@ mod tests {
         let output = Tensor::from_vec(vec![1.0, 1.0]);
         node.hebbian_update(&input, &output, 1.0, 0.1);
         assert_eq!(node.weights.data, w_before);
+    }
+
+    #[test]
+    fn test_weight_serialisation_roundtrip() {
+        let mut node = LinearNode::new("roundtrip", 4, 2, Tier::Surface, 0.88);
+        node.frozen = true;
+        // Modify weights to non-default values
+        node.weights.data[0] = 42.0;
+        node.bias.data[1] = -3.14;
+
+        let saved = node.save_weights_data().unwrap();
+        assert_eq!(saved.id, "roundtrip");
+        assert_eq!(saved.weights[0], 42.0);
+        assert_eq!(saved.bias[1], -3.14);
+        assert!(saved.frozen);
+
+        // Create a fresh node with same id and dimensions
+        let mut node2 = LinearNode::new("roundtrip", 4, 2, Tier::Surface, 0.88);
+        assert_ne!(node2.weights.data[0], 42.0); // different before load
+
+        node2.load_weights_data(&saved);
+        assert_eq!(node2.weights.data, node.weights.data);
+        assert_eq!(node2.bias.data, node.bias.data);
+        assert!(node2.frozen);
     }
 
     #[test]
