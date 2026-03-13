@@ -619,10 +619,8 @@ def confidence(encoding, surface_weight, g5_stats):
     """
     from prepare import norm, cosine_sim
 
-    input_norm = norm(encoding)
-    base_conf = min(input_norm, 1.0)
     cos = cosine_sim(encoding, surface_weight)
-    conf = base_conf * 0.7 + cos * 0.3
+    conf = cos
 
     # G5 penalty: penalize when structural complexity is high
     g5_start = g5_stats['g5_start']
