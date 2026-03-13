@@ -625,21 +625,21 @@ def confidence(encoding, surface_weight, g5_stats):
     # Weighted penalty from ALL G4 dims (indices 101-115, amp = G4_AMP)
     # Each weight controls how much that scalar penalizes surface confidence
     g4_penalty_weights = [
-        0.0,   # 0: token_count_norm — longer sentences aren't necessarily complex
-        -0.1,  # 1: TTR — high unique ratio = complex vocabulary
-        0.0,   # 2: mean_token_len
-        0.1,   # 3: dep_depth — subordination proxy
-        0.0,   # 4: mean_clause_len
-        0.0,   # 5: lexical_density
-        0.0,   # 6: bigram_diversity
-        0.0,   # 7: sentence_rhythm
-        0.0,   # 8: vocab_richness
-        0.0,   # 9: length_variation
-        0.15,  # 10: rare_ratio
-        0.1,   # 11: clause_proxy
-        0.3,   # 12: academic_ratio
-        0.2,   # 13: polysyllabic_ratio
-        0.15,  # 14: char_entropy
+        0.0,    # 0: token_count_norm
+        -0.05,  # 1: TTR — high unique ratio = complex vocabulary
+        0.0,    # 2: mean_token_len
+        0.1,    # 3: dep_depth — subordination proxy
+        0.0,    # 4: mean_clause_len
+        0.0,    # 5: lexical_density
+        0.0,    # 6: bigram_diversity
+        0.0,    # 7: sentence_rhythm
+        0.0,    # 8: vocab_richness
+        0.0,    # 9: length_variation
+        0.1,    # 10: rare_ratio
+        0.1,    # 11: clause_proxy
+        0.2,    # 12: academic_ratio
+        0.3,    # 13: polysyllabic_ratio
+        0.1,    # 14: char_entropy
     ]
     penalty = 0.0
     for i, w in enumerate(g4_penalty_weights):
@@ -647,7 +647,7 @@ def confidence(encoding, surface_weight, g5_stats):
             penalty += (encoding[101 + i] / G4_AMP) * w
     # G2 long word ratio: dim 23, index 26+23=49, amp G2_AMP
     long_word_ratio = encoding[49] / G2_AMP
-    penalty += long_word_ratio * 0.15
+    penalty += long_word_ratio * 0.2
     conf = max(0.0, conf - max(0.0, penalty))
 
     return max(0.0, min(1.0, conf))
