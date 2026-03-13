@@ -125,6 +125,10 @@ pub struct Encoder {
     pub output_dim: usize,
     /// Reference to tokeniser for end-to-end encoding.
     pub tokeniser: Tokeniser,
+    /// When true, G5 structural features are divided by sqrt(token_count)
+    /// to normalize for sentence length. Prevents long simple sentences
+    /// from having inflated G5 norms.
+    pub g5_length_normalize: bool,
 }
 
 impl Encoder {
@@ -136,6 +140,7 @@ impl Encoder {
         Self {
             output_dim: OUTPUT_DIM,
             tokeniser,
+            g5_length_normalize: false,
         }
     }
 
@@ -837,7 +842,15 @@ impl Encoder {
         data.extend(syntactic.iter().map(|v| v * Self::G2_AMP));
         data.extend(tokens.iter().map(|v| v * Self::G3_AMP));
         data.extend(scalars.iter().map(|v| v * Self::G4_AMP));
-        data.extend(structural.iter().map(|v| v * Self::G5_AMP));
+
+        // G5: optionally normalize by sqrt(token_count) to decouple length from structure
+        let g5_scale = if self.g5_length_normalize {
+            let token_count = token_ids.len().max(1) as f32;
+            Self::G5_AMP / token_count.sqrt()
+        } else {
+            Self::G5_AMP
+        };
+        data.extend(structural.iter().map(|v| v * g5_scale));
 
         debug_assert_eq!(data.len(), OUTPUT_DIM);
         Tensor::from_vec(data)

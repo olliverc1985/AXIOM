@@ -913,6 +913,35 @@ impl HierarchicalResolver {
         }
     }
 
+    /// Accumulate contrastive examples from a resolve result without applying Oja/error updates.
+    ///
+    /// Use this in phased training when you want contrastive-only learning.
+    pub fn accumulate_contrastive(&mut self, input: &Tensor, result: &ResolveResult) {
+        if result.from_cache {
+            return;
+        }
+        match result.tier_reached {
+            Tier::Surface => {
+                for node in self.surface_nodes.iter_mut() {
+                    node.accumulate_positive(input);
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.accumulate_positive(input);
+                }
+                self.graph.accumulate_contrastive_all(input, true);
+            }
+            Tier::Reasoning | Tier::Deep => {
+                for node in self.surface_nodes.iter_mut() {
+                    node.accumulate_negative(input);
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.accumulate_negative(input);
+                }
+                self.graph.accumulate_contrastive_all(input, false);
+            }
+        }
+    }
+
     /// Apply contrastive weight update on all Surface nodes (graph + standalone + lateral).
     ///
     /// Called every 100 iterations during learning. Returns diagnostic info for each
@@ -1364,7 +1393,7 @@ impl HierarchicalResolver {
             noise_scale: 0.1,
         };
 
-        let g5_penalty = Some((G5_OFFSET, g5_end, g5_simple_norm, g5_complex_norm, 0.25));
+        let g5_penalty = Some((G5_OFFSET, g5_end, g5_simple_norm, g5_complex_norm, 0.35));
 
         // Apply to graph nodes (Surface tier only)
         for (i, node) in self.graph.nodes_mut().iter_mut().enumerate() {
@@ -1495,6 +1524,40 @@ impl HierarchicalResolver {
         }
         for node in &mut self.lateral_nodes {
             node.set_g5_magnitude_penalty(params);
+        }
+    }
+
+    /// Set confidence base weight on all nodes (all tiers).
+    pub fn set_confidence_base_weight_all(&mut self, weight: f32) {
+        for node in self.graph.nodes_mut() {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.surface_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.reasoning_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.deep_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.lateral_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+    }
+
+    /// Set G4 magnitude penalty on all Surface nodes.
+    pub fn set_g4_penalty_all_surface(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
+        for node in self.graph.nodes_mut() {
+            if node.tier() == Tier::Surface {
+                node.set_g4_magnitude_penalty(params);
+            }
+        }
+        for node in &mut self.surface_nodes {
+            node.set_g4_magnitude_penalty(params);
+        }
+        for node in &mut self.lateral_nodes {
+            node.set_g4_magnitude_penalty(params);
         }
     }
 
@@ -1740,9 +1803,12 @@ impl HierarchicalResolver {
 
     /// Build a resolver from an explicit AxiomConfig.
     pub fn build_with_axiom_config(input_dim: usize, config: &AxiomConfig) -> Self {
-        use crate::graph::edge::ConditionalEdge;
+        Self::build_with_axiom_config_mid_dim(input_dim, config, input_dim / 2)
+    }
 
-        let mid_dim = input_dim / 2;
+    /// Build a resolver from an explicit AxiomConfig with a custom mid_dim (output dimension per node).
+    pub fn build_with_axiom_config_mid_dim(input_dim: usize, config: &AxiomConfig, mid_dim: usize) -> Self {
+        use crate::graph::edge::ConditionalEdge;
 
         // ── Graph: 8 Surface + 4 Reasoning + 2 Deep = 14 nodes ──
         let mut graph = SparseGraph::new("surface_entry");

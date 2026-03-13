@@ -114,6 +114,11 @@ pub trait ComputeNode: Send + Sync {
     /// how close the input's G5 norm is to the complex corpus mean.
     /// Params: (g5_offset, g5_end, simple_mean_norm, complex_mean_norm, weight).
     fn set_g5_magnitude_penalty(&mut self, _params: Option<(usize, usize, f32, f32, f32)>) {}
+    /// Set G4 magnitude penalty parameters for Surface confidence.
+    /// Params: (g4_start, g4_end, simple_mean_norm, complex_mean_norm, weight).
+    fn set_g4_magnitude_penalty(&mut self, _params: Option<(usize, usize, f32, f32, f32)>) {}
+    /// Set the confidence base weight (mix ratio between base_confidence and cosine_sim).
+    fn set_confidence_base_weight(&mut self, _weight: f32) {}
     /// Orthogonally initialise weights toward a specific basis direction.
     fn init_orthogonal(&mut self, _basis_vector: &[f32], _noise_scale: f32, _seed: u64) {}
     /// Return the node's mean weight direction vector (mean of weight columns).
@@ -288,6 +293,12 @@ pub struct LinearNode {
     /// Subtracts a penalty proportional to how close the input's G5 norm is to
     /// the complex corpus mean, pushing structurally complex inputs below threshold.
     g5_magnitude_penalty: Option<(usize, usize, f32, f32, f32)>,
+    /// G4 magnitude penalty for Surface confidence.
+    /// When Some: (g4_start, g4_end, simple_mean_norm, complex_mean_norm, weight).
+    g4_magnitude_penalty: Option<(usize, usize, f32, f32, f32)>,
+    /// Weight for base_confidence in the confidence mix (default 0.7).
+    /// confidence = base_weight * base_confidence + (1 - base_weight) * cosine_sim
+    pub confidence_base_weight: f32,
 }
 
 
@@ -335,6 +346,8 @@ impl LinearNode {
             contrastive_lr: 0.01,
             frozen: false,
             g5_magnitude_penalty: None,
+            g4_magnitude_penalty: None,
+            confidence_base_weight: 0.7,
         }
     }
 
@@ -367,6 +380,8 @@ impl LinearNode {
             contrastive_lr: 0.01,
             frozen: false,
             g5_magnitude_penalty: None,
+            g4_magnitude_penalty: None,
+            confidence_base_weight: 0.7,
         }
     }
 
@@ -504,7 +519,8 @@ impl ComputeNode for LinearNode {
         } else {
             0.5
         };
-        let mut confidence = (self.base_confidence * 0.7 + cosine_sim * 0.3).clamp(0.0, 1.0);
+        let cbw = self.confidence_base_weight;
+        let mut confidence = (self.base_confidence * cbw + cosine_sim * (1.0 - cbw)).clamp(0.0, 1.0);
 
         // G5 magnitude penalty (Phase 14): reduce Surface confidence for
         // inputs with high structural complexity (high G5 norm).
@@ -521,6 +537,24 @@ impl ComputeNode for LinearNode {
                     .sqrt();
                 let penalty =
                     ((g5_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
+                confidence = (confidence - penalty * weight).clamp(0.0, 1.0);
+            }
+        }
+
+        // G4 magnitude penalty: same mechanism as G5 but for complexity scalars.
+        if let Some((g4_start, g4_end, simple_norm, complex_norm, weight)) =
+            self.g4_magnitude_penalty
+        {
+            let s = g4_start.min(input_slice.len());
+            let e = g4_end.min(input_slice.len());
+            if s < e && complex_norm > simple_norm + epsilon {
+                let g4_norm = input_slice[s..e]
+                    .iter()
+                    .map(|x| x * x)
+                    .sum::<f32>()
+                    .sqrt();
+                let penalty =
+                    ((g4_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
                 confidence = (confidence - penalty * weight).clamp(0.0, 1.0);
             }
         }
@@ -628,9 +662,8 @@ impl ComputeNode for LinearNode {
     }
 
     fn accumulate_positive(&mut self, input: &Tensor) {
-        if self.frozen {
-            return;
-        }
+        // Contrastive accumulation allowed even on frozen nodes —
+        // frozen only blocks Oja/error updates, not contrastive learning.
         let len = self.input_dim.min(input.data.len());
         for i in 0..len {
             self.positive_accumulator[i] += input.data[i];
@@ -639,9 +672,7 @@ impl ComputeNode for LinearNode {
     }
 
     fn accumulate_negative(&mut self, input: &Tensor) {
-        if self.frozen {
-            return;
-        }
+        // Contrastive accumulation allowed even on frozen nodes.
         let len = self.input_dim.min(input.data.len());
         for i in 0..len {
             self.negative_accumulator[i] += input.data[i];
@@ -650,9 +681,7 @@ impl ComputeNode for LinearNode {
     }
 
     fn apply_contrastive_update(&mut self) -> Option<ContrastiveUpdateInfo> {
-        if self.frozen {
-            return None;
-        }
+        // Contrastive updates allowed even on frozen nodes.
         if self.positive_count == 0 || self.negative_count == 0 {
             return None;
         }
@@ -737,6 +766,14 @@ impl ComputeNode for LinearNode {
 
     fn set_g5_magnitude_penalty(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
         self.g5_magnitude_penalty = params;
+    }
+
+    fn set_g4_magnitude_penalty(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
+        self.g4_magnitude_penalty = params;
+    }
+
+    fn set_confidence_base_weight(&mut self, weight: f32) {
+        self.confidence_base_weight = weight;
     }
 
     fn init_orthogonal(&mut self, basis_vector: &[f32], noise_scale: f32, seed: u64) {
@@ -1161,19 +1198,22 @@ mod tests {
     }
 
     #[test]
-    fn test_frozen_node_ignores_contrastive() {
+    fn test_frozen_node_allows_contrastive() {
+        // Frozen nodes block Oja/error updates but allow contrastive learning.
+        // This enables Surface nodes to adapt their discrimination direction
+        // while keeping Hebbian/error updates frozen.
         let mut node = LinearNode::new("frozen_c", 4, 2, Tier::Surface, 0.9);
         node.frozen = true;
         let w_before = node.weights.data.clone();
-        let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
-        node.accumulate_positive(&input);
-        node.accumulate_negative(&input);
-        // Accumulation should be no-op when frozen
-        assert_eq!(node.positive_count, 0);
-        assert_eq!(node.negative_count, 0);
+        let pos_input = Tensor::from_vec(vec![1.0, 0.5, 0.0, 0.0]);
+        let neg_input = Tensor::from_vec(vec![0.0, 0.0, 0.5, 1.0]);
+        node.accumulate_positive(&pos_input);
+        node.accumulate_negative(&neg_input);
+        assert_eq!(node.positive_count, 1);
+        assert_eq!(node.negative_count, 1);
         let info = node.apply_contrastive_update();
-        assert!(info.is_none(), "Frozen node should not produce contrastive update");
-        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+        assert!(info.is_some(), "Frozen node should produce contrastive update");
+        assert_ne!(node.weights.data, w_before, "Frozen node weights should change via contrastive");
     }
 
     #[test]

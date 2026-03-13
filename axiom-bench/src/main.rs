@@ -25,8 +25,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+/// Read an environment variable and parse it, or return the default.
+fn env_or<T: FromStr>(key: &str, default: T) -> T {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
 
 /// JSON log entry for a text training iteration.
 #[derive(Serialize, Deserialize)]
@@ -438,15 +447,23 @@ fn main() {
         .unwrap_or(8080);
 
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║   AXIOM Phase 14 — G5 Structural Syntax Features       ║");
-    println!("║  128-dim V5 encoder, G5 magnitude penalty, frozen Surf ║");
+    println!("║  AXIOM Phase 15 — Autoresearch Squeeze                 ║");
+    println!("║  ~1M params, unfrozen contrastive, G5=0.35, env sweep  ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 
     let input_dim = 128;
-    let train_iterations = 50_000;
-    let learning_rate = 0.001;
-    let error_lr = 0.0005;
+    let train_iterations: usize = env_or("AXIOM_ITER", 50_000);
+    let learning_rate: f32 = env_or("AXIOM_LR", 0.001);
+    let error_lr: f32 = env_or("AXIOM_ERROR_LR", 0.0005);
+    let g5_weight: f32 = env_or("AXIOM_G5_WEIGHT", 0.35);
+    let g4_weight: f32 = env_or("AXIOM_G4_WEIGHT", 0.0);
+    let contrastive_lr_override: f32 = env_or("AXIOM_CONTRASTIVE_LR", 0.001);
+    let confidence_base_weight: f32 = env_or("AXIOM_CONF_MIX", 0.7);
+    let mid_dim_override: usize = env_or("AXIOM_MID_DIM", 128); // doubled from 64 for ~1M params
+    let lr_schedule: String = env_or("AXIOM_LR_SCHEDULE", "constant".to_string());
+    let phased_training: bool = env_or("AXIOM_PHASED", false);
+    let g5_normalize: bool = env_or("AXIOM_G5_NORMALIZE", false);
 
     // Load corpus
     let corpus = Corpus::load();
@@ -495,6 +512,14 @@ fn main() {
     println!();
     println!("  Config: dim={}, train_iterations={}, lr={}, error_lr={}",
         input_dim, train_iterations, learning_rate, error_lr);
+    println!("  Overrides: g5_w={}, g4_w={}, contrastive_lr={}, conf_mix={:.1}/{:.1}",
+        g5_weight, g4_weight, contrastive_lr_override,
+        confidence_base_weight, 1.0 - confidence_base_weight);
+    if mid_dim_override > 0 {
+        println!("  Mid dim override: {}", mid_dim_override);
+    }
+    println!("  LR schedule: {}, phased: {}, g5_normalize: {}",
+        lr_schedule, phased_training, g5_normalize);
 
     // Build encoder — train tokeniser on corpus + validation + diagnostic sentences
     let validation_sentences = test_sentences();
@@ -510,7 +535,11 @@ fn main() {
         tokeniser.tokenise(sentence);
     }
     tokeniser.save_vocab("axiom_vocab.json").ok();
-    let encoder = Encoder::new(input_dim, tokeniser);
+    let mut encoder = Encoder::new(input_dim, tokeniser);
+    if g5_normalize {
+        encoder.g5_length_normalize = true;
+        println!("  G5 length normalization: ENABLED (÷ sqrt(token_count))");
+    }
     println!("  Vocabulary: {} tokens", encoder.tokeniser.vocab_size());
 
     // Dashboard setup
@@ -525,7 +554,10 @@ fn main() {
     }
 
     // Build resolver from config (includes calibration pass)
-    let mut resolver = HierarchicalResolver::build_with_axiom_config(input_dim, &config);
+    let actual_mid_dim = if mid_dim_override > 0 { mid_dim_override } else { input_dim / 2 };
+    let mut resolver = HierarchicalResolver::build_with_axiom_config_mid_dim(input_dim, &config, actual_mid_dim);
+    println!("  Node mid_dim: {} ({})", actual_mid_dim,
+        if mid_dim_override > 0 { "override" } else { "default" });
 
     // Phase 9: reduce cache threshold from 0.92 to 0.75 to prevent learning starvation
     let cache_threshold = 0.75f32;
@@ -550,6 +582,44 @@ fn main() {
     println!("    complex_mean norm: {:.4}", complex_norm);
     println!("    cosine(simple_mean, complex_mean): {:.6}", mean_cosine);
     println!("    Surface nodes: frozen=true, weights point toward simple space");
+
+    // Apply env overrides for G5 penalty weight and contrastive LR
+    if (g5_weight - 0.25).abs() > 1e-6 {
+        resolver.set_g5_penalty_weight(g5_weight);
+        println!("    G5 penalty weight override: {}", g5_weight);
+    }
+    resolver.set_contrastive_lr_all_surface(contrastive_lr_override);
+    println!("    Contrastive LR (all Surface): {}", contrastive_lr_override);
+
+    // G4 magnitude penalty (complexity scalars, dims 101-115)
+    if g4_weight > 0.0 {
+        let g4_start = 26 + 36 + 39; // = 101
+        let g4_end = g4_start + 15;   // = 116
+        // Compute G4 norms from corpus
+        let g4_simple_norm = {
+            let mean: Vec<f32> = (0..input_dim).map(|d| {
+                simple_tensors.iter().map(|t| t.data[d]).sum::<f32>() / simple_tensors.len() as f32
+            }).collect();
+            mean[g4_start..g4_end].iter().map(|v| v * v).sum::<f32>().sqrt()
+        };
+        let g4_complex_norm = {
+            let mean: Vec<f32> = (0..input_dim).map(|d| {
+                complex_tensors.iter().map(|t| t.data[d]).sum::<f32>() / complex_tensors.len() as f32
+            }).collect();
+            mean[g4_start..g4_end].iter().map(|v| v * v).sum::<f32>().sqrt()
+        };
+        let g4_params = Some((g4_start, g4_end, g4_simple_norm, g4_complex_norm, g4_weight));
+        resolver.set_g4_penalty_all_surface(g4_params);
+        println!("    G4 penalty: weight={}, simple_norm={:.4}, complex_norm={:.4}",
+            g4_weight, g4_simple_norm, g4_complex_norm);
+    }
+
+    // Confidence mix ratio override
+    if (confidence_base_weight - 0.7).abs() > 1e-6 {
+        resolver.set_confidence_base_weight_all(confidence_base_weight);
+        println!("    Confidence mix override: {:.1}/{:.1} (base/cosine)",
+            confidence_base_weight, 1.0 - confidence_base_weight);
+    }
     println!();
 
     // ── Phase 13: Orthogonal R+D initialisation ──
@@ -705,14 +775,38 @@ fn main() {
         let surface_conf = resolver.max_surface_confidence(tensor);
         let result = resolver.resolve(tensor);
 
-        // Oja's rule learning
-        if learning_rate > 0.0 {
-            resolver.learn(tensor, &result, learning_rate, i + 1);
+        // Compute effective learning rates for this iteration
+        let (eff_lr, eff_error_lr) = if lr_schedule == "cosine" {
+            let progress = i as f32 / train_iterations as f32;
+            let cosine_factor = 0.5 * (1.0 + (std::f32::consts::PI * progress).cos());
+            (learning_rate * cosine_factor, error_lr * cosine_factor)
+        } else {
+            (learning_rate, error_lr)
+        };
+
+        // Phased training: first half contrastive-only, second half Oja-only
+        let (use_oja, use_contrastive) = if phased_training {
+            if i < train_iterations / 2 {
+                (false, true) // Phase 1: contrastive only
+            } else {
+                (true, false) // Phase 2: Oja only
+            }
+        } else {
+            (true, true)
+        };
+
+        // Learning: Oja + contrastive accumulation (or contrastive-only in phased mode)
+        if use_oja && eff_lr > 0.0 {
+            // Full learn() does both contrastive accumulation and Oja updates
+            resolver.learn(tensor, &result, eff_lr, i + 1);
+        } else if use_contrastive {
+            // Contrastive-only phase: accumulate examples without Oja updates
+            resolver.accumulate_contrastive(tensor, &result);
         }
 
-        // Error signal
-        if error_lr > 0.0 {
-            resolver.apply_error_signal(tensor, &result, error_lr);
+        // Error signal (only with Oja)
+        if use_oja && eff_error_lr > 0.0 {
+            resolver.apply_error_signal(tensor, &result, eff_error_lr);
         }
 
         // Phase 13: track coalition stats
@@ -754,7 +848,7 @@ fn main() {
         });
 
         // Contrastive update every 100 iterations
-        if learning_rate > 0.0 && (i + 1) % 100 == 0 {
+        if use_contrastive && learning_rate > 0.0 && (i + 1) % 100 == 0 {
             let infos = resolver.apply_contrastive_update_all();
             for info in &infos {
                 total_contrastive_updates += 1;
@@ -1018,7 +1112,7 @@ fn main() {
     println!(
         "  Surface norm:  {:.4} -> {:.4} (delta {:.4}) {}",
         initial_surface_norm, final_surface_norm, surface_drift,
-        if surface_drift < 0.001 { "FROZEN" } else { "DRIFTED — ERROR" }
+        if surface_drift < 0.001 { "FROZEN" } else { "DRIFTED (contrastive)" }
     );
     println!(
         "  R+D norm:      {:.4} -> {:.4} (delta {:.4})",
@@ -1485,7 +1579,7 @@ fn main() {
     // ═══════════════════════════════════════════════════════
     // ADVERSARIAL PASS — G5 penalty weight=0.25
     // ═══════════════════════════════════════════════════════
-    println!("─── Adversarial Pass (19 sentences) ───");
+    println!("─── Adversarial Pass (19 sentences, G5={}) ───", g5_weight);
 
     let adversarial_sentences: Vec<(&str, &str)> = vec![
         // Very short complex
@@ -1677,7 +1771,7 @@ fn main() {
     println!("═══════════════════ PHASE 14 FINAL SUMMARY ═══════════════════");
     println!("  Total parameters:        {}", weight_count);
     println!("  Training iterations:     {}", train_iterations);
-    println!("  G5 penalty weight:       0.25");
+    println!("  G5 penalty weight:       {}", g5_weight);
     println!("  G5 norms:                simple={:.4}  complex={:.4}",
         resolver.g5_simple_mean_norm, resolver.g5_complex_mean_norm);
     println!("  Surface weight norm:     {:.4} (constant — frozen)", initial_surface_norm);
