@@ -6,7 +6,7 @@
 //! R+D nodes orthogonally initialised for diverse specialisation.
 //! Coalition formation: escalated inputs trigger bidding across R+D nodes.
 //! Oja's rule fires ONLY on active coalition members — differential activation.
-//! Phase 13: coalition_bid_threshold=0.15, max_coalition_size=5.
+//! Phase 13: coalition_bid_threshold=0.10, max_coalition_size=4.
 //!
 //! Usage:
 //!   cargo run --release -p axiom-bench              # terminal only
@@ -138,10 +138,10 @@ fn diagnostic_sentences() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
-/// Hardcoded validation sentences (50 total: 15 simple, 18 moderate, 17 complex).
+/// Hardcoded validation sentences (105 total: 40 simple, 33 moderate, 32 complex).
 fn test_sentences() -> Vec<(&'static str, &'static str)> {
     vec![
-        // Simple (15)
+        // Simple (40)
         ("the cat sat on the mat", "simple"),
         ("hello world", "simple"),
         ("the dog runs fast", "simple"),
@@ -157,7 +157,32 @@ fn test_sentences() -> Vec<(&'static str, &'static str)> {
         ("trees grow tall", "simple"),
         ("snow falls in december", "simple"),
         ("the baby sleeps quietly", "simple"),
-        // Moderate (18)
+        ("she walked to the store", "simple"),
+        ("the car is red", "simple"),
+        ("he ate lunch at noon", "simple"),
+        ("my dog likes bones", "simple"),
+        ("the door is open", "simple"),
+        ("we went to the park", "simple"),
+        ("the flowers are blooming", "simple"),
+        ("it snowed last night", "simple"),
+        ("they played football after school", "simple"),
+        ("the milk is cold", "simple"),
+        ("she wore a blue dress", "simple"),
+        ("the train arrived on time", "simple"),
+        ("he fixed the broken chair", "simple"),
+        ("we ate dinner together", "simple"),
+        ("the cat chased the mouse", "simple"),
+        ("rain makes the grass green", "simple"),
+        ("the clock struck twelve", "simple"),
+        ("she sings every morning", "simple"),
+        ("he painted the fence white", "simple"),
+        ("the children ran outside", "simple"),
+        ("they watched a movie last night", "simple"),
+        ("coffee keeps me awake", "simple"),
+        ("the wind blows gently", "simple"),
+        ("she closed the window", "simple"),
+        ("the soup is hot", "simple"),
+        // Moderate (33)
         ("machine learning models require significant computational resources", "moderate"),
         ("the stock market fluctuates based on investor sentiment and economic indicators", "moderate"),
         ("neural networks approximate complex nonlinear functions through layered transformations", "moderate"),
@@ -176,7 +201,22 @@ fn test_sentences() -> Vec<(&'static str, &'static str)> {
         ("memory management in systems programming prevents resource leaks and corruption", "moderate"),
         ("functional programming emphasises immutability and compositional reasoning", "moderate"),
         ("type systems provide compile time guarantees about program behaviour", "moderate"),
-        // Complex (17)
+        ("version control systems track changes and enable collaborative software development", "moderate"),
+        ("containerisation isolates applications and their dependencies for consistent deployment", "moderate"),
+        ("natural language processing bridges the gap between human communication and machine understanding", "moderate"),
+        ("gradient descent optimises model parameters by following the steepest direction of loss reduction", "moderate"),
+        ("load balancing distributes incoming requests across multiple servers to prevent overload", "moderate"),
+        ("data normalisation reduces redundancy and improves integrity in relational databases", "moderate"),
+        ("event driven architectures decouple producers and consumers for better scalability", "moderate"),
+        ("regularisation techniques prevent overfitting by penalising model complexity during training", "moderate"),
+        ("network protocols define rules for data exchange between connected computing devices", "moderate"),
+        ("operating systems manage hardware resources and provide services to application software", "moderate"),
+        ("continuous integration automates testing and building software after every code change", "moderate"),
+        ("hash functions map arbitrary input to fixed size output for efficient data retrieval", "moderate"),
+        ("binary search reduces the search space by half with each comparison step", "moderate"),
+        ("recursive algorithms solve problems by breaking them into smaller identical subproblems", "moderate"),
+        ("concurrency control mechanisms ensure data consistency in multi user database systems", "moderate"),
+        // Complex (32)
         ("the recursive nature of self-referential systems creates emergent properties that resist reduction", "complex"),
         ("consciousness remains an unsolved problem at the intersection of neuroscience philosophy and computation", "complex"),
         ("the halting problem demonstrates fundamental limits of algorithmic decidability in formal systems", "complex"),
@@ -194,6 +234,21 @@ fn test_sentences() -> Vec<(&'static str, &'static str)> {
         ("kolmogorov complexity offers an objective measure of randomness but is itself uncomputable in the general case", "complex"),
         ("strange attractors in dynamical systems exhibit sensitive dependence on initial conditions while maintaining bounded trajectories", "complex"),
         ("the church turing thesis equates mechanical computation with turing machine computation but remains an unproven conjecture", "complex"),
+        ("the frame problem in artificial intelligence reveals how difficult it is to represent the effects of actions in a changing world", "complex"),
+        ("non equilibrium thermodynamics describes systems far from steady state where entropy production drives self organisation", "complex"),
+        ("the underdetermination of scientific theory by empirical evidence means multiple incompatible theories can explain the same observations", "complex"),
+        ("modal logic extends propositional logic with operators for necessity and possibility enabling reasoning about hypothetical scenarios", "complex"),
+        ("the Chinese room argument challenges the notion that syntactic manipulation alone can produce genuine semantic understanding", "complex"),
+        ("topological quantum computing encodes information in braided anyons whose non abelian statistics provide inherent fault tolerance", "complex"),
+        ("the renormalisation group explains how physical systems exhibit universal behaviour near critical phase transitions regardless of microscopic details", "complex"),
+        ("algorithmic information theory unifies computation probability and statistics through the lens of Kolmogorov complexity and Solomonoff induction", "complex"),
+        ("the binding problem asks how distributed neural representations combine into unified conscious experience across spatially separated brain regions", "complex"),
+        ("Bayesian nonparametric models allow the complexity of statistical models to grow with available data rather than being fixed a priori", "complex"),
+        ("the symbol grounding problem questions how formal symbols in a computational system acquire meaning beyond their syntactic relationships", "complex"),
+        ("ergodic theory studies the long term statistical behaviour of dynamical systems and underpins much of statistical mechanics", "complex"),
+        ("the Curry Howard correspondence reveals a deep isomorphism between proofs in logic and programs in typed lambda calculus", "complex"),
+        ("causal inference frameworks distinguish genuine cause and effect from mere statistical association using intervention and counterfactual reasoning", "complex"),
+        ("the no free lunch theorem establishes that no single optimisation algorithm outperforms all others across every possible problem landscape", "complex"),
     ]
 }
 
@@ -448,22 +503,24 @@ fn main() {
 
     println!("╔══════════════════════════════════════════════════════════╗");
     println!("║  AXIOM Phase 15 — Autoresearch Squeeze                 ║");
-    println!("║  ~1M params, unfrozen contrastive, G5=0.35, env sweep  ║");
+    println!("║  ~1M params, 2500+ corpus, unfrozen contrastive, sweep ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 
     let input_dim = 128;
-    let train_iterations: usize = env_or("AXIOM_ITER", 50_000);
+    let train_iterations: usize = env_or("AXIOM_ITER", 100_000);
     let learning_rate: f32 = env_or("AXIOM_LR", 0.001);
     let error_lr: f32 = env_or("AXIOM_ERROR_LR", 0.0005);
     let g5_weight: f32 = env_or("AXIOM_G5_WEIGHT", 0.35);
     let g4_weight: f32 = env_or("AXIOM_G4_WEIGHT", 0.0);
-    let contrastive_lr_override: f32 = env_or("AXIOM_CONTRASTIVE_LR", 0.001);
+    let contrastive_lr_override: f32 = env_or("AXIOM_CONTRASTIVE_LR", 0.00005);
     let confidence_base_weight: f32 = env_or("AXIOM_CONF_MIX", 0.7);
     let mid_dim_override: usize = env_or("AXIOM_MID_DIM", 128); // doubled from 64 for ~1M params
     let lr_schedule: String = env_or("AXIOM_LR_SCHEDULE", "constant".to_string());
     let phased_training: bool = env_or("AXIOM_PHASED", false);
     let g5_normalize: bool = env_or("AXIOM_G5_NORMALIZE", false);
+    let coalition_max: usize = env_or("AXIOM_COALITION_MAX", 4);
+    let coalition_thresh: f32 = env_or("AXIOM_COALITION_THRESH", 0.10);
 
     // Load corpus
     let corpus = Corpus::load();
@@ -564,6 +621,11 @@ fn main() {
     resolver.cache = axiom_core::cache::EmbeddingCache::new(256, cache_threshold);
     println!("  Cache threshold override: {:.2} (Phase 9 — prevent learning starvation)", cache_threshold);
 
+    // Coalition overrides
+    resolver.coalition_max_size = coalition_max;
+    resolver.coalition_bid_threshold = coalition_thresh;
+    println!("  Coalition: max_size={}, bid_threshold={:.2}", coalition_max, coalition_thresh);
+
     // ── Phase 11: Analytical Surface initialisation ──
     // Encode all simple and complex corpus sentences
     let simple_tensors: Vec<_> = corpus.simple.iter()
@@ -573,8 +635,19 @@ fn main() {
         .map(|s| encoder.encode_text_readonly(s))
         .collect();
 
+    // Word counts for length-bucketed G5 penalty
+    let simple_word_counts: Vec<usize> = corpus.simple.iter()
+        .map(|s| s.split_whitespace().count())
+        .collect();
+    let complex_word_counts: Vec<usize> = corpus.complex.iter()
+        .map(|s| s.split_whitespace().count())
+        .collect();
+
     let (dir_norm, simple_norm, complex_norm, mean_cosine) =
-        resolver.init_surface_analytical(&simple_tensors, &complex_tensors);
+        resolver.init_surface_analytical_bucketed(
+            &simple_tensors, &complex_tensors,
+            &simple_word_counts, &complex_word_counts,
+        );
 
     println!("  Analytical Surface initialisation:");
     println!("    discrimination_direction norm (pre-L2): {:.6}", dir_norm);
@@ -693,9 +766,11 @@ fn main() {
     // ═══════════════════════════════════════════════════════
     // Phase 10: Training mode — cache completely bypassed
     resolver.mode = RouteMode::Training;
+    let n_corpus = all_sentences.len();
+    let passes = train_iterations / n_corpus.max(1);
     println!(
-        "─── Text Training: {} iterations (100 passes x 500 sentences) ───",
-        train_iterations
+        "─── Text Training: {} iterations ({} passes x {} sentences) ───",
+        train_iterations, passes, n_corpus
     );
     println!("    lr={}, error_lr={}, mode={:?}", learning_rate, error_lr, resolver.mode);
     println!();
@@ -1217,10 +1292,13 @@ fn main() {
     resolver.mode = RouteMode::Inference;
     println!("─── Population-Aware Calibration on Text (mode={:?}) ───", resolver.mode);
 
-    // Sample 100 sentences (40 simple, 30 moderate, 30 complex)
-    let calib_simple: Vec<_> = corpus.simple[..40].to_vec();
-    let calib_moderate: Vec<_> = corpus.moderate[..30].to_vec();
-    let calib_complex: Vec<_> = corpus.complex[..30].to_vec();
+    // Sample up to 200 sentences (proportional, capped per category)
+    let calib_n_simple = corpus.simple.len().min(80);
+    let calib_n_moderate = corpus.moderate.len().min(60);
+    let calib_n_complex = corpus.complex.len().min(60);
+    let calib_simple: Vec<_> = corpus.simple[..calib_n_simple].to_vec();
+    let calib_moderate: Vec<_> = corpus.moderate[..calib_n_moderate].to_vec();
+    let calib_complex: Vec<_> = corpus.complex[..calib_n_complex].to_vec();
 
     let mut calib_confs: Vec<f32> = Vec::new();
     let mut simple_calib_confs: Vec<f32> = Vec::new();
@@ -1579,21 +1657,37 @@ fn main() {
     // ═══════════════════════════════════════════════════════
     // ADVERSARIAL PASS — G5 penalty weight=0.25
     // ═══════════════════════════════════════════════════════
-    println!("─── Adversarial Pass (19 sentences, G5={}) ───", g5_weight);
+    let adversarial_count = 41;
+    println!("─── Adversarial Pass ({} sentences, G5={}) ───", adversarial_count, g5_weight);
 
     let adversarial_sentences: Vec<(&str, &str)> = vec![
         // Very short complex
         ("Cogito ergo sum", "complex"),
         ("Gödel's proof breaks mathematics", "complex"),
         ("Being precedes essence", "complex"),
+        ("time is relative", "complex"),
+        ("maps are not territories", "complex"),
+        ("meaning requires context", "complex"),
+        ("logic precedes language", "complex"),
+        ("infinity is countable sometimes", "complex"),
         // Very long simple
         ("the big red dog ran quickly down the long straight road toward the tall old brown wooden fence near the small quiet house by the river", "simple"),
+        ("the little grey cat sat on the soft warm mat by the big stone fireplace and purred quietly while the rain fell outside", "simple"),
+        ("my grandmother bakes the most delicious chocolate chip cookies every single weekend without fail", "simple"),
         // Rare words simple structure
         ("the tintinnabulation resonated melodiously", "simple"),
         ("photosynthesis converts sunlight efficiently", "simple"),
         // Common words complex nesting
         ("the cat that the dog that the man owned chased sat on the mat", "complex"),
         ("she said that he thought that they believed it was true", "complex"),
+        // Domain complex with simple syntax
+        ("the mitochondrial electron transport chain couples proton translocation with ATP synthesis", "complex"),
+        ("genome wide association studies identify statistical correlations between genetic variants and phenotypic traits", "complex"),
+        // Garden path sentences
+        ("the horse raced past the barn fell", "complex"),
+        ("the old man the boats", "complex"),
+        // Ambiguous
+        ("time flies like an arrow but fruit flies like a banana", "complex"),
         // Mixed complexity
         ("neural networks approximate complex nonlinear functions through hierarchical feature learning", "complex"),
         ("it is raining today", "simple"),
@@ -1606,6 +1700,17 @@ fn main() {
         ("dark matter constitutes approximately twenty seven percent of the total mass energy content of the observable universe", "complex"),
         ("she runs fast", "simple"),
         ("go", "simple"),
+        // Additional adversarial edge cases
+        ("I saw the man with the telescope", "complex"),
+        ("the complex houses married and single soldiers and their families", "complex"),
+        ("we saw her duck", "complex"),
+        ("the cotton clothing is made of grows in Mississippi", "complex"),
+        ("the prime number theorem describes the asymptotic distribution of primes", "complex"),
+        ("he gave her cat food", "simple"),
+        ("the big fluffy white dog played happily in the sunny green park all morning long", "simple"),
+        ("they ate pizza", "simple"),
+        ("she danced gracefully across the wooden stage", "simple"),
+        ("the lamp is on the table", "simple"),
     ];
 
     // Run adversarial pass manually to capture coalition details
@@ -1672,8 +1777,8 @@ fn main() {
         adv_correct, adv_scored,
         adv_correct as f32 / adv_scored as f32 * 100.0
     );
-    println!("  Phase 12 baseline: 8/17 (47.1%)");
-    let delta = adv_correct as i32 - 8;
+    println!("  Phase 12 baseline (original 17 scored): 8/17 (47.1%)");
+    let delta = adv_correct as i32 - (adv_scored as i32 / 2); // compare to 50% baseline
     println!(
         "  Delta: {:+} ({})",
         delta,
@@ -1734,9 +1839,9 @@ fn main() {
     println!("─── Phase 14: Three Questions ───");
     println!();
     println!("  Q1: Did G5 structural features improve adversarial routing?");
-    println!("      Adversarial score: {}/{} ({:.1}%) vs Phase 12 baseline 8/17 (47.1%)",
+    println!("      Adversarial score: {}/{} ({:.1}%) vs Phase 12 baseline 47.1%",
         adv_correct, adv_scored, adv_correct as f32 / adv_scored as f32 * 100.0);
-    if adv_correct > 8 {
+    if (adv_correct as f32 / adv_scored as f32) > 0.471 {
         println!("      YES — G5 magnitude penalty correctly escalates sentences");
         println!("      with complex syntactic structure (nested clauses, garden paths).");
         println!("      The penalty exploits G5 norm differences that cosine similarity");

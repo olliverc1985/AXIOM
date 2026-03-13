@@ -109,8 +109,8 @@ const G5_PREPOSITIONS: &[&str] = &[
 ///   normalised by total n-gram count. 26 buckets.
 /// - **Group 2** (dims 26–61): Syntactic proxy features — word length octiles, variance,
 ///   function word density, punctuation, capitalisation, binary markers, structural features,
-///   nested clause depth proxies, pronoun density, clause boundary density, hapax ratio,
-///   sentence complexity score. 36 dims.
+///   nested clause depth proxies, pronoun density, clause boundary density, mean word length,
+///   rare word density, character diversity. 36 dims.
 /// - **Group 3** (dims 62–100): Position-weighted token signal — token IDs folded into
 ///   39 buckets by `id % 39`, weighted by `1/(1+position)`. NOT normalised.
 /// - **Group 4** (dims 101–115): Complexity scalars — token count, TTR, mean length,
@@ -219,9 +219,9 @@ impl Encoder {
     /// - Dim 30: Subordinating conjunction count normalised 0–1 against 5.
     /// - Dim 31: Pronoun density (pronoun count / total tokens).
     /// - Dim 32: Clause boundary density ((comma+semicolon+colon) / total tokens).
-    /// - Dim 33: Average syllable proxy (vowel groups per token, normalised 0–1 against 5).
-    /// - Dim 34: Hapax ratio (tokens appearing exactly once / total tokens).
-    /// - Dim 35: Sentence complexity score (weighted composite, normalised 0–1 against 20).
+    /// - Dim 33: Mean word length (chars) — mean(len(word)) / 12.0, capped at 1.0.
+    /// - Dim 34: Rare word density — count(words > 8 chars) / total_words.
+    /// - Dim 35: Character diversity — unique_chars / total_chars.
     fn syntactic_features(words: &[String], raw_text: &str) -> [f32; SYNTACTIC_DIMS] {
         let mut features = [0.0f32; SYNTACTIC_DIMS];
         let n = words.len();
@@ -401,28 +401,28 @@ impl Encoder {
         let colons = raw_text.chars().filter(|&c| c == ':').count();
         features[32] = ((comma_count + semicolons + colons) as f32 / n as f32).min(1.0);
 
-        // Dim 33: Average syllable proxy (vowel groups per token, normalised 0–1 against 5)
+        // Dim 33: Mean word length (chars) — technical/rare words are longer.
+        // Normalised by 12.0, capped at 1.0.
         if n > 0 {
-            let total_syllables = Self::count_syllables(words);
-            features[33] = (total_syllables as f32 / n as f32 / 5.0).min(1.0);
+            let mean_word_len_chars: f32 =
+                words.iter().map(|w| w.len() as f32).sum::<f32>() / n as f32;
+            features[33] = (mean_word_len_chars / 12.0).min(1.0);
         }
 
-        // Dim 34: Hapax ratio (tokens appearing exactly once / total tokens)
-        let mut word_counts: std::collections::HashMap<&str, usize> =
-            std::collections::HashMap::new();
-        for w in words {
-            *word_counts.entry(w.as_str()).or_insert(0) += 1;
+        // Dim 34: Rare word density — count(words > 8 chars) / total_words.
+        // Words longer than 8 characters are typically technical/rare.
+        if n > 0 {
+            let rare_word_count = words.iter().filter(|w| w.len() > 8).count();
+            features[34] = (rare_word_count as f32 / n as f32).min(1.0);
         }
-        let hapax_count = word_counts.values().filter(|&&c| c == 1).count();
-        features[34] = (hapax_count as f32 / n as f32).min(1.0);
 
-        // Dim 35: Sentence complexity score — weighted composite normalised 0–1 against 20
-        let rare_words = words.iter().filter(|w| w.len() > 8).count();
-        let complexity_raw = rel_clause_count as f32 * 2.0
-            + subord_count as f32 * 2.0
-            + rare_words as f32
-            + punct_count as f32;
-        features[35] = (complexity_raw / 20.0).min(1.0);
+        // Dim 35: Character diversity — unique_chars / total_chars.
+        // Complex text uses a more diverse character set.
+        if total_chars > 0 {
+            let all_chars: Vec<char> = words.iter().flat_map(|w| w.chars()).collect();
+            let unique_chars: HashSet<char> = all_chars.iter().copied().collect();
+            features[35] = (unique_chars.len() as f32 / total_chars as f32).min(1.0);
+        }
 
         features
     }
@@ -1354,33 +1354,31 @@ mod tests {
     }
 
     #[test]
-    fn test_hapax_ratio() {
+    fn test_rare_word_density() {
         let tok = Tokeniser::new(200);
         let mut enc = Encoder::new(128, tok);
-        let repeated = enc.encode_text("the the the the the the");
-        let unique_words = enc.encode_text("quantum mechanics describes fundamental particle interactions");
-        // Hapax ratio: G2 base (26) + dim 34 = 60
+        let simple = enc.encode_text("the cat sat on the mat");
+        let technical = enc.encode_text("quantum mechanical descriptions fundamental interactions");
+        // Rare word density (words > 8 chars): G2 base (26) + dim 34 = 60
         assert!(
-            unique_words.data[26 + 34] > repeated.data[26 + 34],
-            "Hapax ratio: unique={:.4} should exceed repeated={:.4}",
-            unique_words.data[26 + 34],
-            repeated.data[26 + 34]
+            technical.data[26 + 34] > simple.data[26 + 34],
+            "Rare word density: technical={:.4} should exceed simple={:.4}",
+            technical.data[26 + 34],
+            simple.data[26 + 34]
         );
     }
 
     #[test]
-    fn test_sentence_complexity_score() {
+    fn test_character_diversity() {
         let tok = Tokeniser::new(200);
         let mut enc = Encoder::new(128, tok);
-        let simple = enc.encode_text("the cat sat");
-        let complex = enc.encode_text(
-            "because the philosophical implications, which scholars that studied metaphysics debated, remained unresolved"
-        );
-        // Sentence complexity score: G2 base (26) + dim 35 = 61
+        let simple = enc.encode_text("the the the the the");
+        let diverse = enc.encode_text("complex philosophical metaphysics quantum");
+        // Character diversity: G2 base (26) + dim 35 = 61
         assert!(
-            complex.data[26 + 35] > simple.data[26 + 35],
-            "Complexity score: complex={:.4} should exceed simple={:.4}",
-            complex.data[26 + 35],
+            diverse.data[26 + 35] > simple.data[26 + 35],
+            "Char diversity: diverse={:.4} should exceed simple={:.4}",
+            diverse.data[26 + 35],
             simple.data[26 + 35]
         );
     }

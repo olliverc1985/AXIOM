@@ -155,6 +155,8 @@ pub struct HierarchicalResolver {
     pub g5_simple_mean_norm: f32,
     /// G5 structural feature norm of complex corpus mean (for persistence).
     pub g5_complex_mean_norm: f32,
+    /// Per-bucket G5 norms: (short_simple, short_complex, med_simple, med_complex, long_simple, long_complex).
+    pub g5_bucket_norms: (f32, f32, f32, f32, f32, f32),
 }
 
 /// An error signal event for diagnostic logging.
@@ -253,12 +255,13 @@ impl HierarchicalResolver {
             temporal_buffer: TemporalBuffer::new(16),
             feedback_log: Vec::new(),
             error_events: Vec::new(),
-            coalition_bid_threshold: 0.15,
-            coalition_max_size: 2,
+            coalition_bid_threshold: 0.10,
+            coalition_max_size: 4,
             coalition_log: Vec::new(),
             coalition_rng: 12345,
             g5_simple_mean_norm: 0.0,
             g5_complex_mean_norm: 0.0,
+            g5_bucket_norms: (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         }
     }
 
@@ -1299,6 +1302,29 @@ impl HierarchicalResolver {
         simple_tensors: &[Tensor],
         complex_tensors: &[Tensor],
     ) -> (f32, f32, f32, f32) {
+        // Delegate with no word counts — all tensors go into the medium bucket.
+        let simple_wc: Vec<usize> = simple_tensors.iter().map(|_| 10).collect();
+        let complex_wc: Vec<usize> = complex_tensors.iter().map(|_| 10).collect();
+        self.init_surface_analytical_bucketed(
+            simple_tensors,
+            complex_tensors,
+            &simple_wc,
+            &complex_wc,
+        )
+    }
+
+    /// Analytical Surface initialisation with per-bucket G5 penalty norms.
+    ///
+    /// `simple_word_counts` and `complex_word_counts` must be parallel to the
+    /// tensor slices and contain the word count of each sentence. Sentences are
+    /// bucketed as short (< 6 words), medium (6–15), or long (> 15).
+    pub fn init_surface_analytical_bucketed(
+        &mut self,
+        simple_tensors: &[Tensor],
+        complex_tensors: &[Tensor],
+        simple_word_counts: &[usize],
+        complex_word_counts: &[usize],
+    ) -> (f32, f32, f32, f32) {
         use crate::input::encoder::{G5_DIM, G5_OFFSET};
 
         let dim = if let Some(t) = simple_tensors.first() {
@@ -1360,7 +1386,7 @@ impl HierarchicalResolver {
             0.0
         };
 
-        // Compute G5 subvector norms for magnitude penalty
+        // Compute global G5 subvector norms (kept for persistence backward compat)
         let g5_end = (G5_OFFSET + G5_DIM).min(dim);
         let g5_simple_norm = if G5_OFFSET < dim {
             simple_mean[G5_OFFSET..g5_end]
@@ -1381,11 +1407,52 @@ impl HierarchicalResolver {
             0.0
         };
 
+        // --- Compute per-bucket G5 norms ---
+        // Helper: compute G5 norm of the mean vector for a subset of tensors.
+        let g5_bucket_norm = |tensors: &[Tensor], word_counts: &[usize], lo: usize, hi_inclusive: usize| -> f32 {
+            let mut mean = vec![0.0f32; dim];
+            let mut count = 0usize;
+            for (t, &wc) in tensors.iter().zip(word_counts.iter()) {
+                if wc >= lo && wc <= hi_inclusive {
+                    for (i, v) in t.data.iter().enumerate() {
+                        if i < dim { mean[i] += v; }
+                    }
+                    count += 1;
+                }
+            }
+            if count == 0 {
+                return 0.0;
+            }
+            let n = count as f32;
+            if G5_OFFSET < dim {
+                mean[G5_OFFSET..g5_end]
+                    .iter()
+                    .map(|v| { let m = v / n; m * m })
+                    .sum::<f32>()
+                    .sqrt()
+            } else {
+                0.0
+            }
+        };
+
+        let short_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 0, 5);
+        let short_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 0, 5);
+        let med_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 6, 15);
+        let med_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 6, 15);
+        let long_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 16, usize::MAX);
+        let long_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 16, usize::MAX);
+
         eprintln!(
-            "G5 penalty norms: simple={:.4}, complex={:.4}, gap={:.4}",
+            "G5 penalty norms: global simple={:.4}, complex={:.4}, gap={:.4}",
             g5_simple_norm,
             g5_complex_norm,
             g5_complex_norm - g5_simple_norm
+        );
+        eprintln!(
+            "G5 bucketed norms: short=({:.4},{:.4}) med=({:.4},{:.4}) long=({:.4},{:.4})",
+            short_simple_norm, short_complex_norm,
+            med_simple_norm, med_complex_norm,
+            long_simple_norm, long_complex_norm
         );
 
         let init = crate::graph::node::AnalyticalInit {
@@ -1393,14 +1460,27 @@ impl HierarchicalResolver {
             noise_scale: 0.1,
         };
 
-        let g5_penalty = Some((G5_OFFSET, g5_end, g5_simple_norm, g5_complex_norm, 0.35));
+        // Fall back to global norms for any empty bucket.
+        let fb_s = g5_simple_norm;
+        let fb_c = g5_complex_norm;
+        let bucketed = Some(crate::graph::node::G5BucketedPenalty {
+            g5_start: G5_OFFSET,
+            g5_end: g5_end,
+            short_simple_norm: if short_simple_norm > 0.0 { short_simple_norm } else { fb_s },
+            short_complex_norm: if short_complex_norm > 0.0 { short_complex_norm } else { fb_c },
+            med_simple_norm: if med_simple_norm > 0.0 { med_simple_norm } else { fb_s },
+            med_complex_norm: if med_complex_norm > 0.0 { med_complex_norm } else { fb_c },
+            long_simple_norm: if long_simple_norm > 0.0 { long_simple_norm } else { fb_s },
+            long_complex_norm: if long_complex_norm > 0.0 { long_complex_norm } else { fb_c },
+            weight: 0.35,
+        });
 
         // Apply to graph nodes (Surface tier only)
         for (i, node) in self.graph.nodes_mut().iter_mut().enumerate() {
             if node.tier() == Tier::Surface {
                 node.init_analytical(&init, 42 + i as u64);
                 node.set_frozen(true);
-                node.set_g5_magnitude_penalty(g5_penalty);
+                node.set_g5_bucketed_penalty(bucketed);
             }
         }
 
@@ -1408,19 +1488,24 @@ impl HierarchicalResolver {
         for (i, node) in self.surface_nodes.iter_mut().enumerate() {
             node.init_analytical(&init, 1000 + i as u64);
             node.set_frozen(true);
-            node.set_g5_magnitude_penalty(g5_penalty);
+            node.set_g5_bucketed_penalty(bucketed);
         }
 
         // Apply to lateral nodes (these are Surface-tier)
         for (i, node) in self.lateral_nodes.iter_mut().enumerate() {
             node.init_analytical(&init, 2000 + i as u64);
             node.set_frozen(true);
-            node.set_g5_magnitude_penalty(g5_penalty);
+            node.set_g5_bucketed_penalty(bucketed);
         }
 
         // Store G5 norms for persistence
         self.g5_simple_mean_norm = g5_simple_norm;
         self.g5_complex_mean_norm = g5_complex_norm;
+        self.g5_bucket_norms = (
+            short_simple_norm, short_complex_norm,
+            med_simple_norm, med_complex_norm,
+            long_simple_norm, long_complex_norm,
+        );
 
         (dir_norm, simple_norm, complex_norm, cosine_sim)
     }
@@ -1509,21 +1594,57 @@ impl HierarchicalResolver {
     }
 
     /// Update the G5 magnitude penalty weight on all Surface nodes.
+    ///
+    /// Uses bucketed norms if available, otherwise falls back to global norms.
     pub fn set_g5_penalty_weight(&mut self, weight: f32) {
-        let g5_simple = self.g5_simple_mean_norm;
-        let g5_complex = self.g5_complex_mean_norm;
         let g5_end = crate::input::encoder::G5_OFFSET + crate::input::encoder::G5_DIM;
-        let params = Some((crate::input::encoder::G5_OFFSET, g5_end, g5_simple, g5_complex, weight));
-        for node in self.graph.nodes_mut() {
-            if node.tier() == Tier::Surface {
+        let (ss, sc, ms, mc, ls, lc) = self.g5_bucket_norms;
+        let has_buckets = ss > 0.0 || sc > 0.0 || ms > 0.0 || mc > 0.0 || ls > 0.0 || lc > 0.0;
+
+        if has_buckets {
+            let penalty = Some(crate::graph::node::G5BucketedPenalty {
+                g5_start: crate::input::encoder::G5_OFFSET,
+                g5_end,
+                short_simple_norm: ss,
+                short_complex_norm: sc,
+                med_simple_norm: ms,
+                med_complex_norm: mc,
+                long_simple_norm: ls,
+                long_complex_norm: lc,
+                weight,
+            });
+            self.set_g5_bucketed_penalty_all(penalty);
+        } else {
+            // Fallback: use global norms in all buckets
+            let g5_simple = self.g5_simple_mean_norm;
+            let g5_complex = self.g5_complex_mean_norm;
+            let params = Some((crate::input::encoder::G5_OFFSET, g5_end, g5_simple, g5_complex, weight));
+            for node in self.graph.nodes_mut() {
+                if node.tier() == Tier::Surface {
+                    node.set_g5_magnitude_penalty(params);
+                }
+            }
+            for node in &mut self.surface_nodes {
+                node.set_g5_magnitude_penalty(params);
+            }
+            for node in &mut self.lateral_nodes {
                 node.set_g5_magnitude_penalty(params);
             }
         }
+    }
+
+    /// Set length-bucketed G5 penalty on all Surface nodes.
+    pub fn set_g5_bucketed_penalty_all(&mut self, penalty: Option<crate::graph::node::G5BucketedPenalty>) {
+        for node in self.graph.nodes_mut() {
+            if node.tier() == Tier::Surface {
+                node.set_g5_bucketed_penalty(penalty);
+            }
+        }
         for node in &mut self.surface_nodes {
-            node.set_g5_magnitude_penalty(params);
+            node.set_g5_bucketed_penalty(penalty);
         }
         for node in &mut self.lateral_nodes {
-            node.set_g5_magnitude_penalty(params);
+            node.set_g5_bucketed_penalty(penalty);
         }
     }
 
@@ -1754,19 +1875,19 @@ impl HierarchicalResolver {
         let config = TierConfig::default();
         let mut resolver = Self::new(graph, cache, config);
 
-        // ── Standalone nodes: 20 Surface + 8 Reasoning + 4 Deep ──
+        // ── Standalone nodes: 20 Surface + 16 Reasoning + 8 Deep ──
         for i in 0..20 {
             let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
             )));
         }
-        for i in 0..8 {
+        for i in 0..16 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning, 0.72,
             )));
         }
-        for i in 0..4 {
+        for i in 0..8 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
             )));
@@ -1870,20 +1991,20 @@ impl HierarchicalResolver {
         };
         let mut resolver = Self::new(graph, cache, tier_config);
 
-        // ── Standalone nodes: 20 Surface + 8 Reasoning + 4 Deep ──
+        // ── Standalone nodes: 20 Surface + 16 Reasoning + 8 Deep ──
         for i in 0..20 {
             let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
             )));
         }
-        for i in 0..8 {
+        for i in 0..16 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning,
                 config.reasoning_base_confidence,
             )));
         }
-        for i in 0..4 {
+        for i in 0..8 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
             )));
@@ -2377,6 +2498,14 @@ impl HierarchicalResolver {
             "nodes": nodes,
             "g5_simple_mean_norm": self.g5_simple_mean_norm,
             "g5_complex_mean_norm": self.g5_complex_mean_norm,
+            "g5_bucket_norms": [
+                self.g5_bucket_norms.0,
+                self.g5_bucket_norms.1,
+                self.g5_bucket_norms.2,
+                self.g5_bucket_norms.3,
+                self.g5_bucket_norms.4,
+                self.g5_bucket_norms.5,
+            ],
         });
         let json = serde_json::to_string(&wrapper)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -2432,6 +2561,14 @@ impl HierarchicalResolver {
         }
         if let Some(v) = wrapper.get("g5_complex_mean_norm").and_then(|v| v.as_f64()) {
             self.g5_complex_mean_norm = v as f32;
+        }
+
+        // Load bucketed G5 norms (backward-compatible: absent key defaults to all zeros)
+        if let Some(arr) = wrapper.get("g5_bucket_norms").and_then(|v| v.as_array()) {
+            let get = |i: usize| -> f32 {
+                arr.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32
+            };
+            self.g5_bucket_norms = (get(0), get(1), get(2), get(3), get(4), get(5));
         }
 
         Ok(())
@@ -3128,8 +3265,8 @@ mod tests {
             directions.push(node.weight_direction());
         }
 
-        // Should have 18 R+D nodes (4 graph reasoning + 2 graph deep + 8 standalone reasoning + 4 standalone deep)
-        assert_eq!(directions.len(), 18, "Expected 18 R+D nodes");
+        // Should have 30 R+D nodes (4 graph reasoning + 2 graph deep + 16 standalone reasoning + 8 standalone deep)
+        assert_eq!(directions.len(), 30, "Expected 30 R+D nodes");
 
         // All pairwise cosine similarities should be < 0.3
         for i in 0..directions.len() {
@@ -3164,7 +3301,7 @@ mod tests {
         let coalition = result.coalition.unwrap();
         assert!(!coalition.members.is_empty(), "Coalition should have members");
         assert!(coalition.members.len() >= 2, "Coalition min size is 2");
-        assert!(coalition.members.len() <= 2, "Coalition max size is 2");
+        assert!(coalition.members.len() <= 4, "Coalition max size is 4");
         assert!(!coalition.resolved_by.is_empty(), "Coalition must have a resolver");
     }
 
@@ -3430,10 +3567,10 @@ mod tests {
                 resolver_set.len(), log.len()
             );
 
-            // Target: mean coalition size between 1.5 and 2.0 (max_coalition_size=2)
+            // Target: mean coalition size between 1.5 and 4.0 (max_coalition_size=4)
             assert!(
-                mean_size >= 1.5 && mean_size <= 2.0,
-                "Mean coalition size {:.1} outside acceptable range [1.5, 2.0]",
+                mean_size >= 1.5 && mean_size <= 4.0,
+                "Mean coalition size {:.1} outside acceptable range [1.5, 4.0]",
                 mean_size
             );
         } else {
