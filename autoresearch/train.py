@@ -75,7 +75,7 @@ MAX_DEP_DEPTH = 10.0
 G1_AMP = 3.0
 G2_AMP = 3.0
 G3_AMP = 1.0
-G4_AMP = 2.0
+G4_AMP = 4.0
 G5_AMP = 3.0
 
 # ─── Dimensions ───
