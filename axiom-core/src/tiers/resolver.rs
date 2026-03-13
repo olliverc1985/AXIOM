@@ -1,6 +1,20 @@
 //! HierarchicalResolver — orchestrates tier escalation with cache integration,
 //! lateral traversal, and feedback signals.
 
+/// Fraction of chunks that must fall below the surface confidence threshold
+/// to trigger escalation for multi-paragraph inputs.
+///
+/// When routing multi-sentence text, AXIOM splits into sentence chunks and
+/// routes each independently. If more than this fraction of chunks produce
+/// surface confidence below the surface threshold, the input escalates to
+/// the most common non-Surface tier among the below-threshold chunks.
+///
+/// Value 0.40 means: if >40% of chunks would escalate individually, the
+/// full input escalates. This balances sensitivity (catching moderate/complex
+/// text where most sentences are simple) against specificity (not over-
+/// escalating simple multi-paragraph emails).
+pub const AXIOM_CHUNK_ESCALATION_THRESHOLD: f32 = 0.40;
+
 use crate::cache::EmbeddingCache;
 use crate::graph::edge::LateralEdge;
 use crate::graph::engine::{RouteResult, TraceStep, TraversalDirection};
@@ -155,6 +169,8 @@ pub struct HierarchicalResolver {
     pub g5_simple_mean_norm: f32,
     /// G5 structural feature norm of complex corpus mean (for persistence).
     pub g5_complex_mean_norm: f32,
+    /// Per-bucket G5 norms: (short_simple, short_complex, med_simple, med_complex, long_simple, long_complex).
+    pub g5_bucket_norms: (f32, f32, f32, f32, f32, f32),
 }
 
 /// An error signal event for diagnostic logging.
@@ -253,12 +269,13 @@ impl HierarchicalResolver {
             temporal_buffer: TemporalBuffer::new(16),
             feedback_log: Vec::new(),
             error_events: Vec::new(),
-            coalition_bid_threshold: 0.15,
-            coalition_max_size: 2,
+            coalition_bid_threshold: 0.10,
+            coalition_max_size: 4,
             coalition_log: Vec::new(),
             coalition_rng: 12345,
             g5_simple_mean_norm: 0.0,
             g5_complex_mean_norm: 0.0,
+            g5_bucket_norms: (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         }
     }
 
@@ -913,6 +930,35 @@ impl HierarchicalResolver {
         }
     }
 
+    /// Accumulate contrastive examples from a resolve result without applying Oja/error updates.
+    ///
+    /// Use this in phased training when you want contrastive-only learning.
+    pub fn accumulate_contrastive(&mut self, input: &Tensor, result: &ResolveResult) {
+        if result.from_cache {
+            return;
+        }
+        match result.tier_reached {
+            Tier::Surface => {
+                for node in self.surface_nodes.iter_mut() {
+                    node.accumulate_positive(input);
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.accumulate_positive(input);
+                }
+                self.graph.accumulate_contrastive_all(input, true);
+            }
+            Tier::Reasoning | Tier::Deep => {
+                for node in self.surface_nodes.iter_mut() {
+                    node.accumulate_negative(input);
+                }
+                for node in self.lateral_nodes.iter_mut() {
+                    node.accumulate_negative(input);
+                }
+                self.graph.accumulate_contrastive_all(input, false);
+            }
+        }
+    }
+
     /// Apply contrastive weight update on all Surface nodes (graph + standalone + lateral).
     ///
     /// Called every 100 iterations during learning. Returns diagnostic info for each
@@ -1270,6 +1316,29 @@ impl HierarchicalResolver {
         simple_tensors: &[Tensor],
         complex_tensors: &[Tensor],
     ) -> (f32, f32, f32, f32) {
+        // Delegate with no word counts — all tensors go into the medium bucket.
+        let simple_wc: Vec<usize> = simple_tensors.iter().map(|_| 10).collect();
+        let complex_wc: Vec<usize> = complex_tensors.iter().map(|_| 10).collect();
+        self.init_surface_analytical_bucketed(
+            simple_tensors,
+            complex_tensors,
+            &simple_wc,
+            &complex_wc,
+        )
+    }
+
+    /// Analytical Surface initialisation with per-bucket G5 penalty norms.
+    ///
+    /// `simple_word_counts` and `complex_word_counts` must be parallel to the
+    /// tensor slices and contain the word count of each sentence. Sentences are
+    /// bucketed as short (< 6 words), medium (6–15), or long (> 15).
+    pub fn init_surface_analytical_bucketed(
+        &mut self,
+        simple_tensors: &[Tensor],
+        complex_tensors: &[Tensor],
+        simple_word_counts: &[usize],
+        complex_word_counts: &[usize],
+    ) -> (f32, f32, f32, f32) {
         use crate::input::encoder::{G5_DIM, G5_OFFSET};
 
         let dim = if let Some(t) = simple_tensors.first() {
@@ -1331,7 +1400,7 @@ impl HierarchicalResolver {
             0.0
         };
 
-        // Compute G5 subvector norms for magnitude penalty
+        // Compute global G5 subvector norms (kept for persistence backward compat)
         let g5_end = (G5_OFFSET + G5_DIM).min(dim);
         let g5_simple_norm = if G5_OFFSET < dim {
             simple_mean[G5_OFFSET..g5_end]
@@ -1352,11 +1421,52 @@ impl HierarchicalResolver {
             0.0
         };
 
+        // --- Compute per-bucket G5 norms ---
+        // Helper: compute G5 norm of the mean vector for a subset of tensors.
+        let g5_bucket_norm = |tensors: &[Tensor], word_counts: &[usize], lo: usize, hi_inclusive: usize| -> f32 {
+            let mut mean = vec![0.0f32; dim];
+            let mut count = 0usize;
+            for (t, &wc) in tensors.iter().zip(word_counts.iter()) {
+                if wc >= lo && wc <= hi_inclusive {
+                    for (i, v) in t.data.iter().enumerate() {
+                        if i < dim { mean[i] += v; }
+                    }
+                    count += 1;
+                }
+            }
+            if count == 0 {
+                return 0.0;
+            }
+            let n = count as f32;
+            if G5_OFFSET < dim {
+                mean[G5_OFFSET..g5_end]
+                    .iter()
+                    .map(|v| { let m = v / n; m * m })
+                    .sum::<f32>()
+                    .sqrt()
+            } else {
+                0.0
+            }
+        };
+
+        let short_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 0, 5);
+        let short_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 0, 5);
+        let med_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 6, 15);
+        let med_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 6, 15);
+        let long_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 16, usize::MAX);
+        let long_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 16, usize::MAX);
+
         eprintln!(
-            "G5 penalty norms: simple={:.4}, complex={:.4}, gap={:.4}",
+            "G5 penalty norms: global simple={:.4}, complex={:.4}, gap={:.4}",
             g5_simple_norm,
             g5_complex_norm,
             g5_complex_norm - g5_simple_norm
+        );
+        eprintln!(
+            "G5 bucketed norms: short=({:.4},{:.4}) med=({:.4},{:.4}) long=({:.4},{:.4})",
+            short_simple_norm, short_complex_norm,
+            med_simple_norm, med_complex_norm,
+            long_simple_norm, long_complex_norm
         );
 
         let init = crate::graph::node::AnalyticalInit {
@@ -1364,14 +1474,27 @@ impl HierarchicalResolver {
             noise_scale: 0.1,
         };
 
-        let g5_penalty = Some((G5_OFFSET, g5_end, g5_simple_norm, g5_complex_norm, 0.25));
+        // Fall back to global norms for any empty bucket.
+        let fb_s = g5_simple_norm;
+        let fb_c = g5_complex_norm;
+        let bucketed = Some(crate::graph::node::G5BucketedPenalty {
+            g5_start: G5_OFFSET,
+            g5_end: g5_end,
+            short_simple_norm: if short_simple_norm > 0.0 { short_simple_norm } else { fb_s },
+            short_complex_norm: if short_complex_norm > 0.0 { short_complex_norm } else { fb_c },
+            med_simple_norm: if med_simple_norm > 0.0 { med_simple_norm } else { fb_s },
+            med_complex_norm: if med_complex_norm > 0.0 { med_complex_norm } else { fb_c },
+            long_simple_norm: if long_simple_norm > 0.0 { long_simple_norm } else { fb_s },
+            long_complex_norm: if long_complex_norm > 0.0 { long_complex_norm } else { fb_c },
+            weight: 0.35,
+        });
 
         // Apply to graph nodes (Surface tier only)
         for (i, node) in self.graph.nodes_mut().iter_mut().enumerate() {
             if node.tier() == Tier::Surface {
                 node.init_analytical(&init, 42 + i as u64);
                 node.set_frozen(true);
-                node.set_g5_magnitude_penalty(g5_penalty);
+                node.set_g5_bucketed_penalty(bucketed);
             }
         }
 
@@ -1379,19 +1502,24 @@ impl HierarchicalResolver {
         for (i, node) in self.surface_nodes.iter_mut().enumerate() {
             node.init_analytical(&init, 1000 + i as u64);
             node.set_frozen(true);
-            node.set_g5_magnitude_penalty(g5_penalty);
+            node.set_g5_bucketed_penalty(bucketed);
         }
 
         // Apply to lateral nodes (these are Surface-tier)
         for (i, node) in self.lateral_nodes.iter_mut().enumerate() {
             node.init_analytical(&init, 2000 + i as u64);
             node.set_frozen(true);
-            node.set_g5_magnitude_penalty(g5_penalty);
+            node.set_g5_bucketed_penalty(bucketed);
         }
 
         // Store G5 norms for persistence
         self.g5_simple_mean_norm = g5_simple_norm;
         self.g5_complex_mean_norm = g5_complex_norm;
+        self.g5_bucket_norms = (
+            short_simple_norm, short_complex_norm,
+            med_simple_norm, med_complex_norm,
+            long_simple_norm, long_complex_norm,
+        );
 
         (dir_norm, simple_norm, complex_norm, cosine_sim)
     }
@@ -1408,7 +1536,9 @@ impl HierarchicalResolver {
 
     /// Split text on sentence-ending punctuation (. ! ?) and return trimmed chunks.
     /// Filters out chunks with fewer than `min_tokens` whitespace-delimited words.
-    fn split_sentences(text: &str, min_tokens: usize) -> Vec<String> {
+    /// Used by diagnostic and experiment binaries for per-chunk analysis.
+    #[allow(dead_code)]
+    pub fn split_sentences(text: &str, min_tokens: usize) -> Vec<String> {
         let mut sentences = Vec::new();
         let mut current = String::new();
         for ch in text.chars() {
@@ -1434,12 +1564,21 @@ impl HierarchicalResolver {
         sentences
     }
 
-    /// Resolve text with sentence chunking.
+    /// Resolve text using threshold strategy C (chunk-aware escalation).
     ///
-    /// Splits input on sentence boundaries (./!/?), filters chunks < 3 tokens,
-    /// encodes each independently, returns mean confidence, mean G5 norm, and
-    /// the ResolveResult from the chunk with highest confidence.
-    /// Single sentences are unaffected — they produce exactly one chunk.
+    /// For single-sentence inputs, routes directly as a single tensor.
+    ///
+    /// For multi-sentence inputs, uses a two-pass approach:
+    /// 1. Split into sentence chunks and route each independently (with
+    ///    cache reset per chunk for independent scores).
+    /// 2. If more than [`AXIOM_CHUNK_ESCALATION_THRESHOLD`] (40%) of chunks
+    ///    fall below the surface confidence threshold, escalate to the most
+    ///    common non-Surface tier among those chunks.
+    /// 3. Otherwise, route the full text as a single tensor — this captures
+    ///    document-level structural features and handles simple multi-paragraph
+    ///    inputs correctly.
+    ///
+    /// Returns (mean_surface_confidence, mean_g5_norm, ResolveResult).
     pub fn resolve_text(
         &mut self,
         encoder: &crate::input::encoder::Encoder,
@@ -1447,6 +1586,7 @@ impl HierarchicalResolver {
     ) -> (f32, f32, ResolveResult) {
         let chunks = Self::split_sentences(text, 3);
 
+        // Single sentence — route directly
         if chunks.len() <= 1 {
             let tensor = encoder.encode_text_readonly(text);
             let g5 = self.compute_g5_norm(&tensor);
@@ -1455,12 +1595,18 @@ impl HierarchicalResolver {
             return (conf, g5, result);
         }
 
+        // Multi-sentence: route each chunk independently
+        let surface_threshold = self.config.surface_confidence_threshold;
         let mut conf_sum = 0.0f32;
         let mut g5_sum = 0.0f32;
-        let mut best_result: Option<ResolveResult> = None;
-        let mut best_conf = f32::NEG_INFINITY;
+        let mut below_count = 0usize;
+        let mut lowest_result: Option<ResolveResult> = None;
+        let mut lowest_conf = f32::INFINITY;
+        let mut highest_result: Option<ResolveResult> = None;
+        let mut highest_conf = f32::NEG_INFINITY;
 
         for chunk in &chunks {
+            self.cache = EmbeddingCache::new(256, 0.75);
             let tensor = encoder.encode_text_readonly(chunk);
             let g5 = self.compute_g5_norm(&tensor);
             let conf = self.max_surface_confidence(&tensor);
@@ -1469,32 +1615,123 @@ impl HierarchicalResolver {
             conf_sum += conf;
             g5_sum += g5;
 
-            if result.route.confidence > best_conf {
-                best_conf = result.route.confidence;
-                best_result = Some(result);
+            if conf < surface_threshold {
+                below_count += 1;
+            }
+
+            if conf < lowest_conf {
+                lowest_conf = conf;
+                lowest_result = Some(result.clone());
+            }
+            if conf > highest_conf {
+                highest_conf = conf;
+                highest_result = Some(result);
             }
         }
 
         let n = chunks.len() as f32;
-        (conf_sum / n, g5_sum / n, best_result.unwrap())
+        let mean_conf = conf_sum / n;
+        let mean_g5 = g5_sum / n;
+        let below_frac = below_count as f32 / n;
+
+        // Strategy C: if >40% of chunks fall below surface threshold → escalate
+        // using the lowest-confidence chunk's result (most complex signal).
+        // Otherwise, use the highest-confidence chunk's result (most Surface-like
+        // signal) — this avoids full-text re-encoding which over-escalates
+        // simple multi-paragraph inputs due to length inflation.
+        if below_frac > AXIOM_CHUNK_ESCALATION_THRESHOLD {
+            (mean_conf, mean_g5, lowest_result.unwrap())
+        } else {
+            (mean_conf, mean_g5, highest_result.unwrap())
+        }
     }
 
     /// Update the G5 magnitude penalty weight on all Surface nodes.
+    ///
+    /// Uses bucketed norms if available, otherwise falls back to global norms.
     pub fn set_g5_penalty_weight(&mut self, weight: f32) {
-        let g5_simple = self.g5_simple_mean_norm;
-        let g5_complex = self.g5_complex_mean_norm;
         let g5_end = crate::input::encoder::G5_OFFSET + crate::input::encoder::G5_DIM;
-        let params = Some((crate::input::encoder::G5_OFFSET, g5_end, g5_simple, g5_complex, weight));
-        for node in self.graph.nodes_mut() {
-            if node.tier() == Tier::Surface {
+        let (ss, sc, ms, mc, ls, lc) = self.g5_bucket_norms;
+        let has_buckets = ss > 0.0 || sc > 0.0 || ms > 0.0 || mc > 0.0 || ls > 0.0 || lc > 0.0;
+
+        if has_buckets {
+            let penalty = Some(crate::graph::node::G5BucketedPenalty {
+                g5_start: crate::input::encoder::G5_OFFSET,
+                g5_end,
+                short_simple_norm: ss,
+                short_complex_norm: sc,
+                med_simple_norm: ms,
+                med_complex_norm: mc,
+                long_simple_norm: ls,
+                long_complex_norm: lc,
+                weight,
+            });
+            self.set_g5_bucketed_penalty_all(penalty);
+        } else {
+            // Fallback: use global norms in all buckets
+            let g5_simple = self.g5_simple_mean_norm;
+            let g5_complex = self.g5_complex_mean_norm;
+            let params = Some((crate::input::encoder::G5_OFFSET, g5_end, g5_simple, g5_complex, weight));
+            for node in self.graph.nodes_mut() {
+                if node.tier() == Tier::Surface {
+                    node.set_g5_magnitude_penalty(params);
+                }
+            }
+            for node in &mut self.surface_nodes {
+                node.set_g5_magnitude_penalty(params);
+            }
+            for node in &mut self.lateral_nodes {
                 node.set_g5_magnitude_penalty(params);
             }
         }
+    }
+
+    /// Set length-bucketed G5 penalty on all Surface nodes.
+    pub fn set_g5_bucketed_penalty_all(&mut self, penalty: Option<crate::graph::node::G5BucketedPenalty>) {
+        for node in self.graph.nodes_mut() {
+            if node.tier() == Tier::Surface {
+                node.set_g5_bucketed_penalty(penalty);
+            }
+        }
         for node in &mut self.surface_nodes {
-            node.set_g5_magnitude_penalty(params);
+            node.set_g5_bucketed_penalty(penalty);
         }
         for node in &mut self.lateral_nodes {
-            node.set_g5_magnitude_penalty(params);
+            node.set_g5_bucketed_penalty(penalty);
+        }
+    }
+
+    /// Set confidence base weight on all nodes (all tiers).
+    pub fn set_confidence_base_weight_all(&mut self, weight: f32) {
+        for node in self.graph.nodes_mut() {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.surface_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.reasoning_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.deep_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+        for node in &mut self.lateral_nodes {
+            node.set_confidence_base_weight(weight);
+        }
+    }
+
+    /// Set G4 magnitude penalty on all Surface nodes.
+    pub fn set_g4_penalty_all_surface(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
+        for node in self.graph.nodes_mut() {
+            if node.tier() == Tier::Surface {
+                node.set_g4_magnitude_penalty(params);
+            }
+        }
+        for node in &mut self.surface_nodes {
+            node.set_g4_magnitude_penalty(params);
+        }
+        for node in &mut self.lateral_nodes {
+            node.set_g4_magnitude_penalty(params);
         }
     }
 
@@ -1691,19 +1928,19 @@ impl HierarchicalResolver {
         let config = TierConfig::default();
         let mut resolver = Self::new(graph, cache, config);
 
-        // ── Standalone nodes: 20 Surface + 8 Reasoning + 4 Deep ──
+        // ── Standalone nodes: 20 Surface + 16 Reasoning + 8 Deep ──
         for i in 0..20 {
             let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
             )));
         }
-        for i in 0..8 {
+        for i in 0..16 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning, 0.72,
             )));
         }
-        for i in 0..4 {
+        for i in 0..8 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
             )));
@@ -1740,9 +1977,12 @@ impl HierarchicalResolver {
 
     /// Build a resolver from an explicit AxiomConfig.
     pub fn build_with_axiom_config(input_dim: usize, config: &AxiomConfig) -> Self {
-        use crate::graph::edge::ConditionalEdge;
+        Self::build_with_axiom_config_mid_dim(input_dim, config, input_dim / 2)
+    }
 
-        let mid_dim = input_dim / 2;
+    /// Build a resolver from an explicit AxiomConfig with a custom mid_dim (output dimension per node).
+    pub fn build_with_axiom_config_mid_dim(input_dim: usize, config: &AxiomConfig, mid_dim: usize) -> Self {
+        use crate::graph::edge::ConditionalEdge;
 
         // ── Graph: 8 Surface + 4 Reasoning + 2 Deep = 14 nodes ──
         let mut graph = SparseGraph::new("surface_entry");
@@ -1804,20 +2044,20 @@ impl HierarchicalResolver {
         };
         let mut resolver = Self::new(graph, cache, tier_config);
 
-        // ── Standalone nodes: 20 Surface + 8 Reasoning + 4 Deep ──
+        // ── Standalone nodes: 20 Surface + 16 Reasoning + 8 Deep ──
         for i in 0..20 {
             let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
             )));
         }
-        for i in 0..8 {
+        for i in 0..16 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning,
                 config.reasoning_base_confidence,
             )));
         }
-        for i in 0..4 {
+        for i in 0..8 {
             resolver.add_tier_node(Box::new(LinearNode::new(
                 format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
             )));
@@ -2074,6 +2314,16 @@ impl HierarchicalResolver {
             "dialectical materialism posits that internal contradictions within socioeconomic structures, rather than external forces alone, drive historical transformation",
             "renormalisation group methods, when applied to systems near critical phase transitions, reveal universal scale-invariant behaviour across many physical phenomena",
             "the frame problem in artificial intelligence highlights the fundamental difficulty of formally representing the implicit non-effects of actions within logical frameworks",
+            // Multi-paragraph simple (common words, multiple sentences, no technical content)
+            "I placed an order last week and have not received it yet. My order number is 5412. Can you check on it for me please?",
+            "Hi, I would like to cancel my subscription. I signed up three months ago but I no longer need the service. Thank you.",
+            "The weather has been really nice this week. We went to the park yesterday and the kids had a great time playing outside.",
+            // Multi-paragraph moderate (technical but accessible, multiple sentences)
+            "I am trying to set up a CI pipeline for our Node.js project. We use GitHub Actions and need to run unit tests and deploy to staging on each push. Can you walk me through the YAML configuration?",
+            "Our PostgreSQL database has been running slowly on queries that join three tables. The largest table has about two million rows. I have added indexes on the foreign keys but performance is still poor.",
+            // Multi-paragraph complex (dense academic prose, multiple sentences, abstract vocabulary)
+            "The epistemological implications of Bayesian inference extend well beyond statistical methodology into the foundations of scientific reasoning itself. When prior distributions encode substantive theoretical commitments, the boundary between inductive evidence and deductive presupposition becomes fundamentally blurred.",
+            "Distributed consensus under asynchronous network conditions remains provably impossible without relaxing either safety or liveness guarantees, as established by the FLP impossibility result. Practical systems must therefore navigate the tension between theoretical limitations and operational requirements through carefully designed failure detectors and timeout mechanisms.",
         ]
     }
 
@@ -2311,6 +2561,14 @@ impl HierarchicalResolver {
             "nodes": nodes,
             "g5_simple_mean_norm": self.g5_simple_mean_norm,
             "g5_complex_mean_norm": self.g5_complex_mean_norm,
+            "g5_bucket_norms": [
+                self.g5_bucket_norms.0,
+                self.g5_bucket_norms.1,
+                self.g5_bucket_norms.2,
+                self.g5_bucket_norms.3,
+                self.g5_bucket_norms.4,
+                self.g5_bucket_norms.5,
+            ],
         });
         let json = serde_json::to_string(&wrapper)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -2366,6 +2624,14 @@ impl HierarchicalResolver {
         }
         if let Some(v) = wrapper.get("g5_complex_mean_norm").and_then(|v| v.as_f64()) {
             self.g5_complex_mean_norm = v as f32;
+        }
+
+        // Load bucketed G5 norms (backward-compatible: absent key defaults to all zeros)
+        if let Some(arr) = wrapper.get("g5_bucket_norms").and_then(|v| v.as_array()) {
+            let get = |i: usize| -> f32 {
+                arr.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32
+            };
+            self.g5_bucket_norms = (get(0), get(1), get(2), get(3), get(4), get(5));
         }
 
         Ok(())
@@ -3062,8 +3328,8 @@ mod tests {
             directions.push(node.weight_direction());
         }
 
-        // Should have 18 R+D nodes (4 graph reasoning + 2 graph deep + 8 standalone reasoning + 4 standalone deep)
-        assert_eq!(directions.len(), 18, "Expected 18 R+D nodes");
+        // Should have 30 R+D nodes (4 graph reasoning + 2 graph deep + 16 standalone reasoning + 8 standalone deep)
+        assert_eq!(directions.len(), 30, "Expected 30 R+D nodes");
 
         // All pairwise cosine similarities should be < 0.3
         for i in 0..directions.len() {
@@ -3098,7 +3364,7 @@ mod tests {
         let coalition = result.coalition.unwrap();
         assert!(!coalition.members.is_empty(), "Coalition should have members");
         assert!(coalition.members.len() >= 2, "Coalition min size is 2");
-        assert!(coalition.members.len() <= 2, "Coalition max size is 2");
+        assert!(coalition.members.len() <= 4, "Coalition max size is 4");
         assert!(!coalition.resolved_by.is_empty(), "Coalition must have a resolver");
     }
 
@@ -3364,10 +3630,10 @@ mod tests {
                 resolver_set.len(), log.len()
             );
 
-            // Target: mean coalition size between 1.5 and 2.0 (max_coalition_size=2)
+            // Target: mean coalition size between 1.5 and 4.0 (max_coalition_size=4)
             assert!(
-                mean_size >= 1.5 && mean_size <= 2.0,
-                "Mean coalition size {:.1} outside acceptable range [1.5, 2.0]",
+                mean_size >= 1.5 && mean_size <= 4.0,
+                "Mean coalition size {:.1} outside acceptable range [1.5, 4.0]",
                 mean_size
             );
         } else {
@@ -3556,6 +3822,94 @@ mod tests {
             simple_mean_g5 < complex_mean_g5,
             "Expected simple mean G5 ({:.4}) < complex mean G5 ({:.4})",
             simple_mean_g5, complex_mean_g5
+        );
+    }
+
+    #[test]
+    fn test_threshold_strategy_c_escalation() {
+        // Threshold strategy C: if >40% of chunks fall below surface threshold,
+        // the input escalates. Otherwise it stays Surface via full-text routing.
+        use crate::input::{Encoder, Tokeniser};
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        let mut tokeniser = Tokeniser::default_tokeniser();
+
+        let simple_sents = [
+            "The cat sat on the mat.",
+            "The dog runs fast.",
+            "Birds fly south in winter.",
+            "Water flows downhill.",
+            "The sky is blue.",
+        ];
+        let complex_sents = [
+            "The recursive nature of self-referential systems creates emergent properties that resist reduction.",
+            "Quantum entanglement challenges classical notions of locality and causality.",
+            "Consciousness remains an unsolved problem at the intersection of neuroscience and philosophy.",
+            "The boundary between deterministic chaos and true randomness has profound implications.",
+            "Emergence in complex adaptive systems suggests that reductionist explanations are fundamentally insufficient.",
+        ];
+        for s in simple_sents.iter().chain(complex_sents.iter()) {
+            tokeniser.tokenise(s);
+        }
+        let encoder = Encoder::new(128, tokeniser);
+
+        // Analytical init for meaningful Surface discrimination
+        let simple_t: Vec<Tensor> = simple_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = complex_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.mode = RouteMode::Inference;
+
+        // Set surface threshold to the midpoint between simple and complex
+        // surface confidences so simple chunks pass and complex chunks don't.
+        let simple_confs: Vec<f32> = simple_sents.iter()
+            .map(|s| resolver.max_surface_confidence(&encoder.encode_text_readonly(s)))
+            .collect();
+        let complex_confs: Vec<f32> = complex_sents.iter()
+            .map(|s| resolver.max_surface_confidence(&encoder.encode_text_readonly(s)))
+            .collect();
+        let simple_mean = simple_confs.iter().sum::<f32>() / simple_confs.len() as f32;
+        let complex_mean = complex_confs.iter().sum::<f32>() / complex_confs.len() as f32;
+        let midpoint = (simple_mean + complex_mean) / 2.0;
+        eprintln!(
+            "Strategy C test: simple_mean={:.4}, complex_mean={:.4}, threshold={:.4}",
+            simple_mean, complex_mean, midpoint
+        );
+        resolver.config.surface_confidence_threshold = midpoint;
+        resolver.rebuild_graph_edges();
+
+        // Case 1: complex paragraph — most chunks below midpoint → escalates
+        let complex_paragraph = complex_sents.join(" ");
+        let (_, _, complex_result) = resolver.resolve_text(&encoder, &complex_paragraph);
+        eprintln!(
+            "Strategy C test: complex paragraph → tier={}, conf={:.4}",
+            complex_result.tier_reached.name(),
+            complex_result.surface_confidence
+        );
+        assert_ne!(
+            complex_result.tier_reached,
+            Tier::Surface,
+            "Complex paragraph (5 complex chunks below midpoint) should escalate"
+        );
+
+        // Case 2: simple paragraph — most chunks above midpoint → stays Surface
+        let simple_paragraph = simple_sents.join(" ");
+        let (_, _, simple_result) = resolver.resolve_text(&encoder, &simple_paragraph);
+        eprintln!(
+            "Strategy C test: simple paragraph → tier={}, conf={:.4}",
+            simple_result.tier_reached.name(),
+            simple_result.surface_confidence
+        );
+        assert_eq!(
+            simple_result.tier_reached,
+            Tier::Surface,
+            "Simple paragraph (5 simple chunks above midpoint) should stay Surface"
+        );
+
+        // Verify the constant
+        assert!(
+            (AXIOM_CHUNK_ESCALATION_THRESHOLD - 0.40).abs() < f32::EPSILON,
+            "AXIOM_CHUNK_ESCALATION_THRESHOLD must be 0.40"
         );
     }
 }

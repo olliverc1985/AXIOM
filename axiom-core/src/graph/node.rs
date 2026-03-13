@@ -114,6 +114,16 @@ pub trait ComputeNode: Send + Sync {
     /// how close the input's G5 norm is to the complex corpus mean.
     /// Params: (g5_offset, g5_end, simple_mean_norm, complex_mean_norm, weight).
     fn set_g5_magnitude_penalty(&mut self, _params: Option<(usize, usize, f32, f32, f32)>) {}
+    /// Set length-bucketed G5 magnitude penalty for Surface confidence.
+    ///
+    /// Replaces the global G5 penalty with per-bucket norms (short/medium/long)
+    /// so that long simple sentences are not unfairly penalised.
+    fn set_g5_bucketed_penalty(&mut self, _penalty: Option<G5BucketedPenalty>) {}
+    /// Set G4 magnitude penalty parameters for Surface confidence.
+    /// Params: (g4_start, g4_end, simple_mean_norm, complex_mean_norm, weight).
+    fn set_g4_magnitude_penalty(&mut self, _params: Option<(usize, usize, f32, f32, f32)>) {}
+    /// Set the confidence base weight (mix ratio between base_confidence and cosine_sim).
+    fn set_confidence_base_weight(&mut self, _weight: f32) {}
     /// Orthogonally initialise weights toward a specific basis direction.
     fn init_orthogonal(&mut self, _basis_vector: &[f32], _noise_scale: f32, _seed: u64) {}
     /// Return the node's mean weight direction vector (mean of weight columns).
@@ -243,6 +253,33 @@ pub struct AnalyticalInit {
     pub noise_scale: f32,
 }
 
+/// Length-bucketed G5 magnitude penalty parameters.
+///
+/// Instead of a single (simple_norm, complex_norm) pair for all inputs, norms
+/// are computed per length bucket (short / medium / long) so that long simple
+/// sentences are not unfairly penalised by inflated G5 norms.
+#[derive(Debug, Clone, Copy)]
+pub struct G5BucketedPenalty {
+    /// Start offset of the G5 subvector in the input.
+    pub g5_start: usize,
+    /// End offset (exclusive) of the G5 subvector in the input.
+    pub g5_end: usize,
+    /// G5 norm of short simple corpus mean (< 6 words).
+    pub short_simple_norm: f32,
+    /// G5 norm of short complex corpus mean (< 6 words).
+    pub short_complex_norm: f32,
+    /// G5 norm of medium simple corpus mean (6–15 words).
+    pub med_simple_norm: f32,
+    /// G5 norm of medium complex corpus mean (6–15 words).
+    pub med_complex_norm: f32,
+    /// G5 norm of long simple corpus mean (> 15 words).
+    pub long_simple_norm: f32,
+    /// G5 norm of long complex corpus mean (> 15 words).
+    pub long_complex_norm: f32,
+    /// Penalty weight (multiplied by the raw 0–1 penalty).
+    pub weight: f32,
+}
+
 /// A linear transform node with trainable weights: output = ReLU(input * W + bias).
 ///
 /// Weights are stored as a flattened matrix [input_dim, output_dim].
@@ -283,11 +320,17 @@ pub struct LinearNode {
     /// When true, all weight update methods become no-ops.
     /// Used for frozen Surface discriminators with analytical initialisation.
     pub frozen: bool,
-    /// G5 magnitude penalty for Surface confidence (Phase 14).
-    /// When Some: (g5_offset, g5_end, simple_mean_norm, complex_mean_norm, weight).
+    /// Length-bucketed G5 magnitude penalty for Surface confidence.
     /// Subtracts a penalty proportional to how close the input's G5 norm is to
-    /// the complex corpus mean, pushing structurally complex inputs below threshold.
-    g5_magnitude_penalty: Option<(usize, usize, f32, f32, f32)>,
+    /// the complex corpus mean for the appropriate length bucket, pushing
+    /// structurally complex inputs below threshold.
+    g5_bucketed_penalty: Option<G5BucketedPenalty>,
+    /// G4 magnitude penalty for Surface confidence.
+    /// When Some: (g4_start, g4_end, simple_mean_norm, complex_mean_norm, weight).
+    g4_magnitude_penalty: Option<(usize, usize, f32, f32, f32)>,
+    /// Weight for base_confidence in the confidence mix (default 0.7).
+    /// confidence = base_weight * base_confidence + (1 - base_weight) * cosine_sim
+    pub confidence_base_weight: f32,
 }
 
 
@@ -334,7 +377,9 @@ impl LinearNode {
             negative_count: 0,
             contrastive_lr: 0.01,
             frozen: false,
-            g5_magnitude_penalty: None,
+            g5_bucketed_penalty: None,
+            g4_magnitude_penalty: None,
+            confidence_base_weight: 0.7,
         }
     }
 
@@ -366,7 +411,9 @@ impl LinearNode {
             negative_count: 0,
             contrastive_lr: 0.01,
             frozen: false,
-            g5_magnitude_penalty: None,
+            g5_bucketed_penalty: None,
+            g4_magnitude_penalty: None,
+            confidence_base_weight: 0.7,
         }
     }
 
@@ -504,23 +551,60 @@ impl ComputeNode for LinearNode {
         } else {
             0.5
         };
-        let mut confidence = (self.base_confidence * 0.7 + cosine_sim * 0.3).clamp(0.0, 1.0);
+        let cbw = self.confidence_base_weight;
+        let mut confidence = (self.base_confidence * cbw + cosine_sim * (1.0 - cbw)).clamp(0.0, 1.0);
 
-        // G5 magnitude penalty (Phase 14): reduce Surface confidence for
-        // inputs with high structural complexity (high G5 norm).
-        if let Some((g5_start, g5_end, simple_norm, complex_norm, weight)) =
-            self.g5_magnitude_penalty
+        // G5 length-bucketed magnitude penalty: reduce Surface confidence for
+        // inputs with high structural complexity (high G5 norm), using per-bucket
+        // norms so that long simple sentences are not unfairly penalised.
+        if let Some(bp) = &self.g5_bucketed_penalty {
+            let s = bp.g5_start.min(input_slice.len());
+            let e = bp.g5_end.min(input_slice.len());
+            if s < e {
+                // Estimate word count from G4 token_count_norm at dim 101.
+                // token_count_norm = word_count / MAX_SENTENCE_LEN (40) then
+                // amplified by G4_AMP (2.0), so word_count ≈ input[101] * 20.0.
+                let word_count_est = if input_slice.len() > 101 {
+                    (input_slice[101] * 20.0).round() as usize
+                } else {
+                    6 // default to medium bucket
+                };
+
+                let (simple_norm, complex_norm) = if word_count_est < 6 {
+                    (bp.short_simple_norm, bp.short_complex_norm)
+                } else if word_count_est <= 15 {
+                    (bp.med_simple_norm, bp.med_complex_norm)
+                } else {
+                    (bp.long_simple_norm, bp.long_complex_norm)
+                };
+
+                if complex_norm > simple_norm + epsilon {
+                    let g5_norm = input_slice[s..e]
+                        .iter()
+                        .map(|x| x * x)
+                        .sum::<f32>()
+                        .sqrt();
+                    let penalty =
+                        ((g5_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
+                    confidence = (confidence - penalty * bp.weight).clamp(0.0, 1.0);
+                }
+            }
+        }
+
+        // G4 magnitude penalty: same mechanism as G5 but for complexity scalars.
+        if let Some((g4_start, g4_end, simple_norm, complex_norm, weight)) =
+            self.g4_magnitude_penalty
         {
-            let s = g5_start.min(input_slice.len());
-            let e = g5_end.min(input_slice.len());
+            let s = g4_start.min(input_slice.len());
+            let e = g4_end.min(input_slice.len());
             if s < e && complex_norm > simple_norm + epsilon {
-                let g5_norm = input_slice[s..e]
+                let g4_norm = input_slice[s..e]
                     .iter()
                     .map(|x| x * x)
                     .sum::<f32>()
                     .sqrt();
                 let penalty =
-                    ((g5_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
+                    ((g4_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
                 confidence = (confidence - penalty * weight).clamp(0.0, 1.0);
             }
         }
@@ -628,9 +712,8 @@ impl ComputeNode for LinearNode {
     }
 
     fn accumulate_positive(&mut self, input: &Tensor) {
-        if self.frozen {
-            return;
-        }
+        // Contrastive accumulation allowed even on frozen nodes —
+        // frozen only blocks Oja/error updates, not contrastive learning.
         let len = self.input_dim.min(input.data.len());
         for i in 0..len {
             self.positive_accumulator[i] += input.data[i];
@@ -639,9 +722,7 @@ impl ComputeNode for LinearNode {
     }
 
     fn accumulate_negative(&mut self, input: &Tensor) {
-        if self.frozen {
-            return;
-        }
+        // Contrastive accumulation allowed even on frozen nodes.
         let len = self.input_dim.min(input.data.len());
         for i in 0..len {
             self.negative_accumulator[i] += input.data[i];
@@ -650,9 +731,7 @@ impl ComputeNode for LinearNode {
     }
 
     fn apply_contrastive_update(&mut self) -> Option<ContrastiveUpdateInfo> {
-        if self.frozen {
-            return None;
-        }
+        // Contrastive updates allowed even on frozen nodes.
         if self.positive_count == 0 || self.negative_count == 0 {
             return None;
         }
@@ -736,7 +815,31 @@ impl ComputeNode for LinearNode {
     }
 
     fn set_g5_magnitude_penalty(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
-        self.g5_magnitude_penalty = params;
+        // Backward-compat: convert global (simple, complex) to bucketed with
+        // the same norms in every bucket.
+        self.g5_bucketed_penalty = params.map(|(s, e, sn, cn, w)| G5BucketedPenalty {
+            g5_start: s,
+            g5_end: e,
+            short_simple_norm: sn,
+            short_complex_norm: cn,
+            med_simple_norm: sn,
+            med_complex_norm: cn,
+            long_simple_norm: sn,
+            long_complex_norm: cn,
+            weight: w,
+        });
+    }
+
+    fn set_g5_bucketed_penalty(&mut self, penalty: Option<G5BucketedPenalty>) {
+        self.g5_bucketed_penalty = penalty;
+    }
+
+    fn set_g4_magnitude_penalty(&mut self, params: Option<(usize, usize, f32, f32, f32)>) {
+        self.g4_magnitude_penalty = params;
+    }
+
+    fn set_confidence_base_weight(&mut self, weight: f32) {
+        self.confidence_base_weight = weight;
     }
 
     fn init_orthogonal(&mut self, basis_vector: &[f32], noise_scale: f32, seed: u64) {
@@ -1161,19 +1264,22 @@ mod tests {
     }
 
     #[test]
-    fn test_frozen_node_ignores_contrastive() {
+    fn test_frozen_node_allows_contrastive() {
+        // Frozen nodes block Oja/error updates but allow contrastive learning.
+        // This enables Surface nodes to adapt their discrimination direction
+        // while keeping Hebbian/error updates frozen.
         let mut node = LinearNode::new("frozen_c", 4, 2, Tier::Surface, 0.9);
         node.frozen = true;
         let w_before = node.weights.data.clone();
-        let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
-        node.accumulate_positive(&input);
-        node.accumulate_negative(&input);
-        // Accumulation should be no-op when frozen
-        assert_eq!(node.positive_count, 0);
-        assert_eq!(node.negative_count, 0);
+        let pos_input = Tensor::from_vec(vec![1.0, 0.5, 0.0, 0.0]);
+        let neg_input = Tensor::from_vec(vec![0.0, 0.0, 0.5, 1.0]);
+        node.accumulate_positive(&pos_input);
+        node.accumulate_negative(&neg_input);
+        assert_eq!(node.positive_count, 1);
+        assert_eq!(node.negative_count, 1);
         let info = node.apply_contrastive_update();
-        assert!(info.is_none(), "Frozen node should not produce contrastive update");
-        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+        assert!(info.is_some(), "Frozen node should produce contrastive update");
+        assert_ne!(node.weights.data, w_before, "Frozen node weights should change via contrastive");
     }
 
     #[test]
