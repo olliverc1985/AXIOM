@@ -523,8 +523,32 @@ fn main() {
     let coalition_thresh: f32 = env_or("AXIOM_COALITION_THRESH", 0.10);
 
     // Load corpus
-    let corpus = Corpus::load();
+    let mut corpus = Corpus::load();
     println!("  Corpus: {} simple, {} moderate, {} complex = {} total",
+        corpus.simple.len(), corpus.moderate.len(), corpus.complex.len(),
+        corpus.simple.len() + corpus.moderate.len() + corpus.complex.len());
+
+    // Load multi-paragraph corpus if available
+    let mp_path = "axiom-datasets/multi_paragraph_corpus.json";
+    if std::path::Path::new(mp_path).exists() {
+        #[derive(Deserialize)]
+        struct MpEntry { text: String, label: String }
+        let mp_data: Vec<MpEntry> = serde_json::from_str(
+            &std::fs::read_to_string(mp_path).expect("failed to read multi-paragraph corpus")
+        ).expect("failed to parse multi-paragraph corpus");
+        let (mut mp_s, mut mp_m, mut mp_c) = (0usize, 0usize, 0usize);
+        for entry in &mp_data {
+            match entry.label.as_str() {
+                "simple" => { corpus.simple.push(entry.text.clone()); mp_s += 1; }
+                "moderate" => { corpus.moderate.push(entry.text.clone()); mp_m += 1; }
+                "complex" => { corpus.complex.push(entry.text.clone()); mp_c += 1; }
+                _ => {}
+            }
+        }
+        println!("  Multi-paragraph: +{} simple, +{} moderate, +{} complex from {}",
+            mp_s, mp_m, mp_c, mp_path);
+    }
+    println!("  Total corpus: {} simple, {} moderate, {} complex = {} total",
         corpus.simple.len(), corpus.moderate.len(), corpus.complex.len(),
         corpus.simple.len() + corpus.moderate.len() + corpus.complex.len());
 

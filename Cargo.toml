@@ -1,3 +1,3 @@
 [workspace]
-members = ["axiom-core", "axiom-bench", "axiom-tuner", "axiom-inference"]
+members = ["axiom-core", "axiom-bench", "axiom-tuner", "axiom-inference", "axiom-llm"]
 resolver = "2"

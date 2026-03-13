@@ -1,6 +1,20 @@
 //! HierarchicalResolver — orchestrates tier escalation with cache integration,
 //! lateral traversal, and feedback signals.
 
+/// Fraction of chunks that must fall below the surface confidence threshold
+/// to trigger escalation for multi-paragraph inputs.
+///
+/// When routing multi-sentence text, AXIOM splits into sentence chunks and
+/// routes each independently. If more than this fraction of chunks produce
+/// surface confidence below the surface threshold, the input escalates to
+/// the most common non-Surface tier among the below-threshold chunks.
+///
+/// Value 0.40 means: if >40% of chunks would escalate individually, the
+/// full input escalates. This balances sensitivity (catching moderate/complex
+/// text where most sentences are simple) against specificity (not over-
+/// escalating simple multi-paragraph emails).
+pub const AXIOM_CHUNK_ESCALATION_THRESHOLD: f32 = 0.40;
+
 use crate::cache::EmbeddingCache;
 use crate::graph::edge::LateralEdge;
 use crate::graph::engine::{RouteResult, TraceStep, TraversalDirection};
@@ -1522,7 +1536,9 @@ impl HierarchicalResolver {
 
     /// Split text on sentence-ending punctuation (. ! ?) and return trimmed chunks.
     /// Filters out chunks with fewer than `min_tokens` whitespace-delimited words.
-    fn split_sentences(text: &str, min_tokens: usize) -> Vec<String> {
+    /// Used by diagnostic and experiment binaries for per-chunk analysis.
+    #[allow(dead_code)]
+    pub fn split_sentences(text: &str, min_tokens: usize) -> Vec<String> {
         let mut sentences = Vec::new();
         let mut current = String::new();
         for ch in text.chars() {
@@ -1548,12 +1564,21 @@ impl HierarchicalResolver {
         sentences
     }
 
-    /// Resolve text with sentence chunking.
+    /// Resolve text using threshold strategy C (chunk-aware escalation).
     ///
-    /// Splits input on sentence boundaries (./!/?), filters chunks < 3 tokens,
-    /// encodes each independently, returns mean confidence, mean G5 norm, and
-    /// the ResolveResult from the chunk with highest confidence.
-    /// Single sentences are unaffected — they produce exactly one chunk.
+    /// For single-sentence inputs, routes directly as a single tensor.
+    ///
+    /// For multi-sentence inputs, uses a two-pass approach:
+    /// 1. Split into sentence chunks and route each independently (with
+    ///    cache reset per chunk for independent scores).
+    /// 2. If more than [`AXIOM_CHUNK_ESCALATION_THRESHOLD`] (40%) of chunks
+    ///    fall below the surface confidence threshold, escalate to the most
+    ///    common non-Surface tier among those chunks.
+    /// 3. Otherwise, route the full text as a single tensor — this captures
+    ///    document-level structural features and handles simple multi-paragraph
+    ///    inputs correctly.
+    ///
+    /// Returns (mean_surface_confidence, mean_g5_norm, ResolveResult).
     pub fn resolve_text(
         &mut self,
         encoder: &crate::input::encoder::Encoder,
@@ -1561,6 +1586,7 @@ impl HierarchicalResolver {
     ) -> (f32, f32, ResolveResult) {
         let chunks = Self::split_sentences(text, 3);
 
+        // Single sentence — route directly
         if chunks.len() <= 1 {
             let tensor = encoder.encode_text_readonly(text);
             let g5 = self.compute_g5_norm(&tensor);
@@ -1569,12 +1595,18 @@ impl HierarchicalResolver {
             return (conf, g5, result);
         }
 
+        // Multi-sentence: route each chunk independently
+        let surface_threshold = self.config.surface_confidence_threshold;
         let mut conf_sum = 0.0f32;
         let mut g5_sum = 0.0f32;
-        let mut best_result: Option<ResolveResult> = None;
-        let mut best_conf = f32::NEG_INFINITY;
+        let mut below_count = 0usize;
+        let mut lowest_result: Option<ResolveResult> = None;
+        let mut lowest_conf = f32::INFINITY;
+        let mut highest_result: Option<ResolveResult> = None;
+        let mut highest_conf = f32::NEG_INFINITY;
 
         for chunk in &chunks {
+            self.cache = EmbeddingCache::new(256, 0.75);
             let tensor = encoder.encode_text_readonly(chunk);
             let g5 = self.compute_g5_norm(&tensor);
             let conf = self.max_surface_confidence(&tensor);
@@ -1583,14 +1615,35 @@ impl HierarchicalResolver {
             conf_sum += conf;
             g5_sum += g5;
 
-            if result.route.confidence > best_conf {
-                best_conf = result.route.confidence;
-                best_result = Some(result);
+            if conf < surface_threshold {
+                below_count += 1;
+            }
+
+            if conf < lowest_conf {
+                lowest_conf = conf;
+                lowest_result = Some(result.clone());
+            }
+            if conf > highest_conf {
+                highest_conf = conf;
+                highest_result = Some(result);
             }
         }
 
         let n = chunks.len() as f32;
-        (conf_sum / n, g5_sum / n, best_result.unwrap())
+        let mean_conf = conf_sum / n;
+        let mean_g5 = g5_sum / n;
+        let below_frac = below_count as f32 / n;
+
+        // Strategy C: if >40% of chunks fall below surface threshold → escalate
+        // using the lowest-confidence chunk's result (most complex signal).
+        // Otherwise, use the highest-confidence chunk's result (most Surface-like
+        // signal) — this avoids full-text re-encoding which over-escalates
+        // simple multi-paragraph inputs due to length inflation.
+        if below_frac > AXIOM_CHUNK_ESCALATION_THRESHOLD {
+            (mean_conf, mean_g5, lowest_result.unwrap())
+        } else {
+            (mean_conf, mean_g5, highest_result.unwrap())
+        }
     }
 
     /// Update the G5 magnitude penalty weight on all Surface nodes.
@@ -2261,6 +2314,16 @@ impl HierarchicalResolver {
             "dialectical materialism posits that internal contradictions within socioeconomic structures, rather than external forces alone, drive historical transformation",
             "renormalisation group methods, when applied to systems near critical phase transitions, reveal universal scale-invariant behaviour across many physical phenomena",
             "the frame problem in artificial intelligence highlights the fundamental difficulty of formally representing the implicit non-effects of actions within logical frameworks",
+            // Multi-paragraph simple (common words, multiple sentences, no technical content)
+            "I placed an order last week and have not received it yet. My order number is 5412. Can you check on it for me please?",
+            "Hi, I would like to cancel my subscription. I signed up three months ago but I no longer need the service. Thank you.",
+            "The weather has been really nice this week. We went to the park yesterday and the kids had a great time playing outside.",
+            // Multi-paragraph moderate (technical but accessible, multiple sentences)
+            "I am trying to set up a CI pipeline for our Node.js project. We use GitHub Actions and need to run unit tests and deploy to staging on each push. Can you walk me through the YAML configuration?",
+            "Our PostgreSQL database has been running slowly on queries that join three tables. The largest table has about two million rows. I have added indexes on the foreign keys but performance is still poor.",
+            // Multi-paragraph complex (dense academic prose, multiple sentences, abstract vocabulary)
+            "The epistemological implications of Bayesian inference extend well beyond statistical methodology into the foundations of scientific reasoning itself. When prior distributions encode substantive theoretical commitments, the boundary between inductive evidence and deductive presupposition becomes fundamentally blurred.",
+            "Distributed consensus under asynchronous network conditions remains provably impossible without relaxing either safety or liveness guarantees, as established by the FLP impossibility result. Practical systems must therefore navigate the tension between theoretical limitations and operational requirements through carefully designed failure detectors and timeout mechanisms.",
         ]
     }
 
@@ -3759,6 +3822,94 @@ mod tests {
             simple_mean_g5 < complex_mean_g5,
             "Expected simple mean G5 ({:.4}) < complex mean G5 ({:.4})",
             simple_mean_g5, complex_mean_g5
+        );
+    }
+
+    #[test]
+    fn test_threshold_strategy_c_escalation() {
+        // Threshold strategy C: if >40% of chunks fall below surface threshold,
+        // the input escalates. Otherwise it stays Surface via full-text routing.
+        use crate::input::{Encoder, Tokeniser};
+
+        let config = AxiomConfig::default();
+        let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
+        let mut tokeniser = Tokeniser::default_tokeniser();
+
+        let simple_sents = [
+            "The cat sat on the mat.",
+            "The dog runs fast.",
+            "Birds fly south in winter.",
+            "Water flows downhill.",
+            "The sky is blue.",
+        ];
+        let complex_sents = [
+            "The recursive nature of self-referential systems creates emergent properties that resist reduction.",
+            "Quantum entanglement challenges classical notions of locality and causality.",
+            "Consciousness remains an unsolved problem at the intersection of neuroscience and philosophy.",
+            "The boundary between deterministic chaos and true randomness has profound implications.",
+            "Emergence in complex adaptive systems suggests that reductionist explanations are fundamentally insufficient.",
+        ];
+        for s in simple_sents.iter().chain(complex_sents.iter()) {
+            tokeniser.tokenise(s);
+        }
+        let encoder = Encoder::new(128, tokeniser);
+
+        // Analytical init for meaningful Surface discrimination
+        let simple_t: Vec<Tensor> = simple_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex_t: Vec<Tensor> = complex_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        resolver.init_surface_analytical(&simple_t, &complex_t);
+        resolver.mode = RouteMode::Inference;
+
+        // Set surface threshold to the midpoint between simple and complex
+        // surface confidences so simple chunks pass and complex chunks don't.
+        let simple_confs: Vec<f32> = simple_sents.iter()
+            .map(|s| resolver.max_surface_confidence(&encoder.encode_text_readonly(s)))
+            .collect();
+        let complex_confs: Vec<f32> = complex_sents.iter()
+            .map(|s| resolver.max_surface_confidence(&encoder.encode_text_readonly(s)))
+            .collect();
+        let simple_mean = simple_confs.iter().sum::<f32>() / simple_confs.len() as f32;
+        let complex_mean = complex_confs.iter().sum::<f32>() / complex_confs.len() as f32;
+        let midpoint = (simple_mean + complex_mean) / 2.0;
+        eprintln!(
+            "Strategy C test: simple_mean={:.4}, complex_mean={:.4}, threshold={:.4}",
+            simple_mean, complex_mean, midpoint
+        );
+        resolver.config.surface_confidence_threshold = midpoint;
+        resolver.rebuild_graph_edges();
+
+        // Case 1: complex paragraph — most chunks below midpoint → escalates
+        let complex_paragraph = complex_sents.join(" ");
+        let (_, _, complex_result) = resolver.resolve_text(&encoder, &complex_paragraph);
+        eprintln!(
+            "Strategy C test: complex paragraph → tier={}, conf={:.4}",
+            complex_result.tier_reached.name(),
+            complex_result.surface_confidence
+        );
+        assert_ne!(
+            complex_result.tier_reached,
+            Tier::Surface,
+            "Complex paragraph (5 complex chunks below midpoint) should escalate"
+        );
+
+        // Case 2: simple paragraph — most chunks above midpoint → stays Surface
+        let simple_paragraph = simple_sents.join(" ");
+        let (_, _, simple_result) = resolver.resolve_text(&encoder, &simple_paragraph);
+        eprintln!(
+            "Strategy C test: simple paragraph → tier={}, conf={:.4}",
+            simple_result.tier_reached.name(),
+            simple_result.surface_confidence
+        );
+        assert_eq!(
+            simple_result.tier_reached,
+            Tier::Surface,
+            "Simple paragraph (5 simple chunks above midpoint) should stay Surface"
+        );
+
+        // Verify the constant
+        assert!(
+            (AXIOM_CHUNK_ESCALATION_THRESHOLD - 0.40).abs() < f32::EPSILON,
+            "AXIOM_CHUNK_ESCALATION_THRESHOLD must be 0.40"
         );
     }
 }
