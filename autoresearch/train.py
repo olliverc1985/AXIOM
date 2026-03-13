@@ -631,7 +631,7 @@ def confidence(encoding, surface_weight, g5_stats):
 
     if g5_c - g5_s > 1e-8:
         penalty = max(0.0, min(1.0, (g5_n - g5_s) / (g5_c - g5_s)))
-        conf = max(0.0, conf - penalty * 0.05)
+        conf = max(0.0, conf - penalty * 0.0)
 
     return max(0.0, min(1.0, conf))
 
