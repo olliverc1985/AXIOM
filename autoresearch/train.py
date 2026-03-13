@@ -647,10 +647,19 @@ def confidence(encoding, surface_weight, g5_stats):
             penalty += (encoding[101 + i] / G4_AMP) * w
     # G2 long word ratio: dim 23, index 26+23=49, amp G2_AMP
     long_word_ratio = encoding[49] / G2_AMP
-    penalty += long_word_ratio * 0.2
+    penalty += long_word_ratio * 0.18
     # G2 initial capital: dim 25, index 26+25=51, amp G2_AMP
     init_cap = encoding[51] / G2_AMP
     penalty += init_cap * 0.15
+    # G2 max_wl: dim 11, index 26+11=37
+    max_wl = encoding[37] / G2_AMP
+    penalty += max_wl * 0.2
+    # G2 punct: dim 13, index 26+13=39
+    punct = encoding[39] / G2_AMP
+    penalty += punct * 0.15
+    # G2 octile5 (avg word len in 6th octile): dim 5, index 26+5=31
+    octile5 = encoding[31] / G2_AMP
+    penalty -= octile5 * 0.15  # bonus
     conf = max(0.0, conf - max(0.0, penalty))
 
     return max(0.0, min(1.0, conf))
