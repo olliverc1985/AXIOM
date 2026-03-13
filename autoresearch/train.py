@@ -626,7 +626,9 @@ def confidence(encoding, surface_weight, g5_stats):
     acad_signal = encoding[113] / G4_AMP  # un-amplify to get raw ratio
     # Polysyllabic penalty: G4 dim 13 = polysyllabic word ratio (index 114, amp 2.0)
     poly_signal = encoding[114] / G4_AMP
-    conf = max(0.0, conf - acad_signal * 0.3 - poly_signal * 0.2)
+    # Char entropy penalty: G4 dim 14 = character entropy (index 115, amp 2.0)
+    entropy_signal = encoding[115] / G4_AMP
+    conf = max(0.0, conf - acad_signal * 0.3 - poly_signal * 0.2 - entropy_signal * 0.1)
 
     return max(0.0, min(1.0, conf))
 
