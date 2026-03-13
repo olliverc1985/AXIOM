@@ -645,6 +645,9 @@ def confidence(encoding, surface_weight, g5_stats):
     for i, w in enumerate(g4_penalty_weights):
         if w != 0.0:
             penalty += (encoding[101 + i] / G4_AMP) * w
+    # G2 long word ratio: dim 23, index 26+23=49, amp G2_AMP
+    long_word_ratio = encoding[49] / G2_AMP
+    penalty += long_word_ratio * 0.15
     conf = max(0.0, conf - max(0.0, penalty))
 
     return max(0.0, min(1.0, conf))
