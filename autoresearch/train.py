@@ -623,9 +623,10 @@ def confidence(encoding, surface_weight, g5_stats):
     conf = cos
 
     # Academic word penalty: G4 dim 12 = academic suffix ratio (index 113, amp 2.0)
-    # If a sentence has academic suffixes, reduce Surface confidence
     acad_signal = encoding[113] / G4_AMP  # un-amplify to get raw ratio
-    conf = max(0.0, conf - acad_signal * 0.3)
+    # Polysyllabic penalty: G4 dim 13 = polysyllabic word ratio (index 114, amp 2.0)
+    poly_signal = encoding[114] / G4_AMP
+    conf = max(0.0, conf - acad_signal * 0.3 - poly_signal * 0.2)
 
     return max(0.0, min(1.0, conf))
 
