@@ -622,16 +622,10 @@ def confidence(encoding, surface_weight, g5_stats):
     cos = cosine_sim(encoding, surface_weight)
     conf = cos
 
-    # G5 penalty: penalize when structural complexity is high
-    g5_start = g5_stats['g5_start']
-    g5_end = g5_stats['g5_end']
-    g5_n = norm(encoding[g5_start:g5_end])
-    g5_s = g5_stats['simple_mean']
-    g5_c = g5_stats['complex_mean']
-
-    if g5_c - g5_s > 1e-8:
-        penalty = max(0.0, min(1.0, (g5_n - g5_s) / (g5_c - g5_s)))
-        conf = max(0.0, conf - penalty * 0.0)
+    # Academic word penalty: G4 dim 12 = academic suffix ratio (index 113, amp 2.0)
+    # If a sentence has academic suffixes, reduce Surface confidence
+    acad_signal = encoding[113] / G4_AMP  # un-amplify to get raw ratio
+    conf = max(0.0, conf - acad_signal * 0.3)
 
     return max(0.0, min(1.0, conf))
 
