@@ -1,0 +1,840 @@
+╔══════════════════════════════════════════════════════════╗
+║  AXIOM Phase 15 — Autoresearch Squeeze                 ║
+║  ~1M params, 2500+ corpus, unfrozen contrastive, sweep ║
+╚══════════════════════════════════════════════════════════╝
+
+  Corpus: 820 simple, 850 moderate, 888 complex = 2558 total
+  Mean word count: simple=6.8, moderate=15.8, complex=31.8
+  Vocabulary size: 9847 unique words
+
+  Config source: defaults
+    surface_threshold: 0.85  reasoning_threshold: 0.70
+    reasoning_base_conf: 0.72  cache_sim_threshold: 0.92
+
+  Config: dim=128, train_iterations=100000, lr=0.001, error_lr=0.0005
+  Overrides: g5_w=0.35, g4_w=0, contrastive_lr=0.00005, conf_mix=0.7/0.3
+  Mid dim override: 128
+  LR schedule: constant, phased: false, g5_normalize: false
+  Clause nesting features: ENABLED (G5 dims 7-11)
+  Vocabulary: 1024 tokens
+  Node mid_dim: 128 (override)
+  Cache threshold override: 0.75 (Phase 9 — prevent learning starvation)
+  Coalition: max_size=4, bid_threshold=0.10
+  Analytical Surface initialisation:
+    discrimination_direction norm (pre-L2): 6.681495
+    simple_mean norm:  6.6815
+    complex_mean norm: 9.2202
+    cosine(simple_mean, complex_mean): 0.840536
+    Surface nodes: frozen=true, weights point toward simple space
+    G5 penalty weight override: 0.35
+    Contrastive LR (all Surface): 0.00005
+    Bidirectional G5 penalty: ENABLED
+
+  Phase 13: Orthogonal R+D initialisation:
+    Mean |cos| between R+D weight directions: 0.003218
+    Max  |cos| between R+D weight directions: 0.017497
+    init_reasoning_deep_orthogonal returned:  0.003218
+
+  Post-orthogonal recalibration:
+    surface_threshold: 0.3977  reasoning_threshold: 0.5040
+
+  Total trainable parameters: 1205376
+  Calibrated thresholds: surface=0.3977  reasoning=0.5040
+  Initial weight norms: total=822.4496  surface=482.9206  reasoning+deep=339.5289
+
+  Post-analytical-init diagnostic confidences:
+    analytical: simple=0.4220  complex=0.4057  gap=+0.0164  CORRECT
+              [S] 0.4218  "the dog runs fast"
+              [S] 0.4181  "the cat sat on the mat"
+              [S] 0.4262  "birds fly south in winter"
+              [C] 0.4005  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4019  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4145  "the church-turing thesis equates mechanical computation with..."
+    WARNING: Gap below 0.03 — discrimination direction may be too weak
+
+─── Text Training: 100000 iterations (39 passes x 2558 sentences) ───
+    lr=0.001, error_lr=0.0005, mode=Training
+
+    iter  5000: simple=0.4220  complex=0.4057  gap=+0.0163  CORRECT  S_norm=483.0  RD_norm=339.6
+               RD_cos=0.277748  coal_size=4.00  top3=[reasoning_standalone_6(358), reasoning_standalone_12(338), reasoning_analyze_a(331)]
+              [S] 0.4218  "the dog runs fast"
+              [S] 0.4181  "the cat sat on the mat"
+              [S] 0.4262  "birds fly south in winter"
+              [C] 0.4006  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4020  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4146  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3861 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3825 ✓ "Being precedes essence"
+              [c] 0.3969 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8950 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3866 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3944 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4123 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 10000: simple=0.4220  complex=0.4058  gap=+0.0162  CORRECT  S_norm=483.1  RD_norm=339.4
+               RD_cos=0.321828  coal_size=4.00  top3=[reasoning_standalone_6(614), reasoning_standalone_12(614), reasoning_analyze_a(580)]
+              [S] 0.4217  "the dog runs fast"
+              [S] 0.4180  "the cat sat on the mat"
+              [S] 0.4262  "birds fly south in winter"
+              [C] 0.4007  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4021  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4146  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3862 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3825 ✓ "Being precedes essence"
+              [c] 0.3970 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8951 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3866 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3945 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4123 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 15000: simple=0.4220  complex=0.4059  gap=+0.0160  CORRECT  S_norm=483.2  RD_norm=339.8
+               RD_cos=0.376324  coal_size=4.00  top3=[reasoning_standalone_12(865), reasoning_standalone_6(857), deep_resolve_a(819)]
+              [S] 0.4217  "the dog runs fast"
+              [S] 0.4180  "the cat sat on the mat"
+              [S] 0.4262  "birds fly south in winter"
+              [C] 0.4009  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4022  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4147  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3862 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3826 ✓ "Being precedes essence"
+              [c] 0.3971 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8951 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3867 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3946 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4124 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 20000: simple=0.4219  complex=0.4060  gap=+0.0159  CORRECT  S_norm=483.2  RD_norm=339.6
+               RD_cos=0.383687  coal_size=4.00  top3=[reasoning_standalone_12(1112), reasoning_standalone_6(1088), deep_resolve_a(1049)]
+              [S] 0.4217  "the dog runs fast"
+              [S] 0.4180  "the cat sat on the mat"
+              [S] 0.4262  "birds fly south in winter"
+              [C] 0.4010  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4023  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4148  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3862 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3826 ✓ "Being precedes essence"
+              [c] 0.3972 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8952 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3867 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3947 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4125 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 25000: simple=0.4219  complex=0.4061  gap=+0.0158  CORRECT  S_norm=483.3  RD_norm=341.1
+               RD_cos=0.384397  coal_size=4.00  top3=[reasoning_standalone_12(1338), reasoning_standalone_6(1294), reasoning_standalone_1(1284)]
+              [S] 0.4216  "the dog runs fast"
+              [S] 0.4180  "the cat sat on the mat"
+              [S] 0.4261  "birds fly south in winter"
+              [C] 0.4011  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4024  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4148  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3863 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3826 ✓ "Being precedes essence"
+              [c] 0.3972 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8952 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3868 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3948 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4126 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 30000: simple=0.4219  complex=0.4062  gap=+0.0157  CORRECT  S_norm=483.4  RD_norm=344.2
+               RD_cos=0.384320  coal_size=4.00  top3=[reasoning_standalone_12(1566), reasoning_standalone_6(1549), reasoning_standalone_1(1511)]
+              [S] 0.4216  "the dog runs fast"
+              [S] 0.4180  "the cat sat on the mat"
+              [S] 0.4261  "birds fly south in winter"
+              [C] 0.4012  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4025  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4149  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3863 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3827 ✓ "Being precedes essence"
+              [c] 0.3973 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8953 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3869 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3949 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4126 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 35000: simple=0.4219  complex=0.4063  gap=+0.0156  CORRECT  S_norm=483.5  RD_norm=339.9
+               RD_cos=0.376301  coal_size=4.00  top3=[reasoning_standalone_12(1806), reasoning_standalone_6(1795), reasoning_standalone_1(1766)]
+              [S] 0.4216  "the dog runs fast"
+              [S] 0.4179  "the cat sat on the mat"
+              [S] 0.4261  "birds fly south in winter"
+              [C] 0.4014  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4026  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4149  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3864 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3827 ✓ "Being precedes essence"
+              [c] 0.3974 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8953 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3869 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3950 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4127 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 40000: simple=0.4218  complex=0.4064  gap=+0.0154  CORRECT  S_norm=483.6  RD_norm=341.2
+               RD_cos=0.376168  coal_size=4.00  top3=[reasoning_standalone_12(2058), reasoning_standalone_6(2032), reasoning_standalone_1(2014)]
+              [S] 0.4215  "the dog runs fast"
+              [S] 0.4179  "the cat sat on the mat"
+              [S] 0.4261  "birds fly south in winter"
+              [C] 0.4015  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4027  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4150  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3864 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3827 ✓ "Being precedes essence"
+              [c] 0.3974 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8954 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3870 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3951 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4128 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 45000: simple=0.4218  complex=0.4065  gap=+0.0153  CORRECT  S_norm=483.7  RD_norm=341.0
+               RD_cos=0.385567  coal_size=4.00  top3=[reasoning_standalone_6(2293), reasoning_standalone_12(2274), reasoning_standalone_1(2263)]
+              [S] 0.4215  "the dog runs fast"
+              [S] 0.4179  "the cat sat on the mat"
+              [S] 0.4260  "birds fly south in winter"
+              [C] 0.4016  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4028  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4151  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3864 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3827 ✓ "Being precedes essence"
+              [c] 0.3975 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8954 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3870 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3952 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4129 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 50000: simple=0.4218  complex=0.4066  gap=+0.0152  CORRECT  S_norm=483.8  RD_norm=340.1
+               RD_cos=0.374724  coal_size=4.00  top3=[reasoning_standalone_6(2539), reasoning_standalone_12(2521), reasoning_standalone_1(2519)]
+              [S] 0.4215  "the dog runs fast"
+              [S] 0.4179  "the cat sat on the mat"
+              [S] 0.4260  "birds fly south in winter"
+              [C] 0.4017  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4029  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4151  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3865 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3828 ✓ "Being precedes essence"
+              [c] 0.3976 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8955 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3871 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3953 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4129 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 55000: simple=0.4218  complex=0.4067  gap=+0.0151  CORRECT  S_norm=483.9  RD_norm=339.9
+               RD_cos=0.376643  coal_size=4.00  top3=[reasoning_standalone_6(2762), reasoning_standalone_12(2732), reasoning_standalone_1(2724)]
+              [S] 0.4215  "the dog runs fast"
+              [S] 0.4178  "the cat sat on the mat"
+              [S] 0.4260  "birds fly south in winter"
+              [C] 0.4019  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4030  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4152  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3865 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3828 ✓ "Being precedes essence"
+              [c] 0.3977 ✓ "neural networks approximate complex nonlinear func..."
+              [s] 0.8955 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3871 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3954 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4130 ✗ "she said that he thought that they believed it was..."
+              failure score: 6/8
+    iter 60000: simple=0.4217  complex=0.4068  gap=+0.0150  CORRECT  S_norm=484.1  RD_norm=340.2
+               RD_cos=0.377493  coal_size=4.00  top3=[reasoning_standalone_6(2994), reasoning_standalone_12(2986), reasoning_standalone_1(2952)]
+              [S] 0.4214  "the dog runs fast"
+              [S] 0.4178  "the cat sat on the mat"
+              [S] 0.4259  "birds fly south in winter"
+              [C] 0.4020  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4031  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4152  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3865 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3828 ✓ "Being precedes essence"
+              [c] 0.3977 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8956 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3872 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3956 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4131 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 65000: simple=0.4217  complex=0.4069  gap=+0.0148  CORRECT  S_norm=484.2  RD_norm=339.8
+               RD_cos=0.378512  coal_size=4.00  top3=[reasoning_standalone_6(3218), reasoning_standalone_12(3193), reasoning_standalone_1(3168)]
+              [S] 0.4214  "the dog runs fast"
+              [S] 0.4178  "the cat sat on the mat"
+              [S] 0.4259  "birds fly south in winter"
+              [C] 0.4021  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4032  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4153  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3866 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3828 ✓ "Being precedes essence"
+              [c] 0.3978 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8956 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3872 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3957 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4132 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 70000: simple=0.4217  complex=0.4070  gap=+0.0147  CORRECT  S_norm=484.3  RD_norm=339.6
+               RD_cos=0.374058  coal_size=4.00  top3=[reasoning_standalone_6(3432), reasoning_standalone_12(3420), reasoning_standalone_1(3396)]
+              [S] 0.4214  "the dog runs fast"
+              [S] 0.4178  "the cat sat on the mat"
+              [S] 0.4259  "birds fly south in winter"
+              [C] 0.4022  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4033  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4154  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3866 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3829 ✓ "Being precedes essence"
+              [c] 0.3979 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8957 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3873 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3958 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4132 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 75000: simple=0.4216  complex=0.4070  gap=+0.0146  CORRECT  S_norm=484.4  RD_norm=339.8
+               RD_cos=0.372864  coal_size=4.00  top3=[reasoning_standalone_6(3662), reasoning_standalone_12(3633), reasoning_standalone_1(3603)]
+              [S] 0.4213  "the dog runs fast"
+              [S] 0.4177  "the cat sat on the mat"
+              [S] 0.4259  "birds fly south in winter"
+              [C] 0.4023  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4034  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4154  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3866 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3829 ✓ "Being precedes essence"
+              [c] 0.3979 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8957 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3874 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3959 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4133 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 80000: simple=0.4216  complex=0.4071  gap=+0.0145  CORRECT  S_norm=484.5  RD_norm=339.2
+               RD_cos=0.379688  coal_size=4.00  top3=[reasoning_standalone_6(3901), reasoning_standalone_12(3850), reasoning_standalone_1(3829)]
+              [S] 0.4213  "the dog runs fast"
+              [S] 0.4177  "the cat sat on the mat"
+              [S] 0.4258  "birds fly south in winter"
+              [C] 0.4025  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4035  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4155  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3867 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3829 ✓ "Being precedes essence"
+              [c] 0.3980 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8958 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3874 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3960 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4134 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 85000: simple=0.4216  complex=0.4072  gap=+0.0144  CORRECT  S_norm=484.7  RD_norm=338.9
+               RD_cos=0.378699  coal_size=4.00  top3=[reasoning_standalone_6(4141), reasoning_standalone_1(4071), reasoning_standalone_12(4065)]
+              [S] 0.4213  "the dog runs fast"
+              [S] 0.4177  "the cat sat on the mat"
+              [S] 0.4258  "birds fly south in winter"
+              [C] 0.4026  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4036  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4155  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3919 ✓ "Cogito ergo sum"
+              [c] 0.3867 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3829 ✓ "Being precedes essence"
+              [c] 0.3981 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8958 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3875 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3961 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4135 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 90000: simple=0.4216  complex=0.4073  gap=+0.0142  CORRECT  S_norm=484.8  RD_norm=339.1
+               RD_cos=0.381833  coal_size=4.00  top3=[reasoning_standalone_6(4355), reasoning_standalone_1(4307), reasoning_standalone_12(4302)]
+              [S] 0.4212  "the dog runs fast"
+              [S] 0.4177  "the cat sat on the mat"
+              [S] 0.4258  "birds fly south in winter"
+              [C] 0.4027  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4037  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4156  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3918 ✓ "Cogito ergo sum"
+              [c] 0.3867 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3830 ✓ "Being precedes essence"
+              [c] 0.3981 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8959 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3875 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3962 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4135 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 95000: simple=0.4215  complex=0.4074  gap=+0.0141  CORRECT  S_norm=484.9  RD_norm=340.9
+               RD_cos=0.380037  coal_size=4.00  top3=[reasoning_standalone_6(4594), reasoning_standalone_12(4510), reasoning_standalone_2(4505)]
+              [S] 0.4212  "the dog runs fast"
+              [S] 0.4176  "the cat sat on the mat"
+              [S] 0.4258  "birds fly south in winter"
+              [C] 0.4028  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4037  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4157  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3918 ✓ "Cogito ergo sum"
+              [c] 0.3868 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3830 ✓ "Being precedes essence"
+              [c] 0.3982 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8959 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3876 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3963 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4136 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+    iter 100000: simple=0.4215  complex=0.4075  gap=+0.0140  CORRECT  S_norm=485.1  RD_norm=339.7
+               RD_cos=0.374096  coal_size=4.00  top3=[reasoning_standalone_6(4802), reasoning_standalone_12(4713), reasoning_standalone_2(4703)]
+              [S] 0.4212  "the dog runs fast"
+              [S] 0.4176  "the cat sat on the mat"
+              [S] 0.4257  "birds fly south in winter"
+              [C] 0.4029  "the recursive nature of self-referential systems creates eme..."
+              [C] 0.4038  "quantum entanglement challenges classical notions of localit..."
+              [C] 0.4157  "the church-turing thesis equates mechanical computation with..."
+              ── failure sentences (threshold=0.3977) ──
+              [c] 0.3918 ✓ "Cogito ergo sum"
+              [c] 0.3868 ✓ "Gödel's proof breaks mathematics"
+              [c] 0.3830 ✓ "Being precedes essence"
+              [c] 0.3983 ✗ "neural networks approximate complex nonlinear func..."
+              [s] 0.8959 ✓ "the big red dog ran quickly down the long straight..."
+              [s] 0.3876 ✗ "the tintinnabulation resonated melodiously"
+              [c] 0.3964 ✓ "the cat that the dog that the man owned chased sat..."
+              [c] 0.4137 ✗ "she said that he thought that they believed it was..."
+              failure score: 5/8
+  Saved trained weights to axiom_weights.json
+
+  Text Training results (223.40s):
+  Training Tier Distribution:
+       Surface: 79809 (79.8%)
+     Reasoning: 10825 (10.8%)
+          Deep: 9366 (9.4%)
+  Cache hit rate: 0.0%
+  Confidence std dev: 0.126970
+  Weight drift: 822.4496 -> 824.7277 (delta 2.2781, 0.28%)
+  Surface norm:  482.9206 -> 485.0516 (delta 2.1310) DRIFTED (contrastive)
+  R+D norm:      339.5289 -> 339.6760 (delta 0.1472)
+  Contrastive updates: 43000 total
+  Error signals: 0 escalation penalties, 0 cache reinforcements
+  Coalition training stats:
+    Coalitions formed:  20191
+    Mean coalition size: 4.00
+    R+D pairwise |cos|: 0.003218 -> 0.374096 (delta +0.370878)
+    Unique R+D nodes activated: 19
+    Top activated nodes:
+      reasoning_standalone_6: 4802 activations
+      reasoning_standalone_12: 4713 activations
+      reasoning_standalone_2: 4703 activations
+      reasoning_standalone_1: 4698 activations
+      deep_standalone_6: 4684 activations
+
+─── Training Snapshot Table ───
+    iter   s_mean   c_mean      gap   S_nrm  RD_nrm    RD_cos   coal  contrast  status
+  ──────  ───────  ───────  ───────  ──────  ──────  ────────  ─────  ────────  ────────
+    5000   0.4220   0.4057  +0.0163   483.0   339.6  0.277748   4.00      2150  CORRECT
+   10000   0.4220   0.4058  +0.0162   483.1   339.4  0.321828   4.00      4300  CORRECT
+   15000   0.4220   0.4059  +0.0160   483.2   339.8  0.376324   4.00      6450  CORRECT
+   20000   0.4219   0.4060  +0.0159   483.2   339.6  0.383687   4.00      8600  CORRECT
+   25000   0.4219   0.4061  +0.0158   483.3   341.1  0.384397   4.00     10750  CORRECT
+   30000   0.4219   0.4062  +0.0157   483.4   344.2  0.384320   4.00     12900  CORRECT
+   35000   0.4219   0.4063  +0.0156   483.5   339.9  0.376301   4.00     15050  CORRECT
+   40000   0.4218   0.4064  +0.0154   483.6   341.2  0.376168   4.00     17200  CORRECT
+   45000   0.4218   0.4065  +0.0153   483.7   341.0  0.385567   4.00     19350  CORRECT
+   50000   0.4218   0.4066  +0.0152   483.8   340.1  0.374724   4.00     21500  CORRECT
+   55000   0.4218   0.4067  +0.0151   483.9   339.9  0.376643   4.00     23650  CORRECT
+   60000   0.4217   0.4068  +0.0150   484.1   340.2  0.377493   4.00     25800  CORRECT
+   65000   0.4217   0.4069  +0.0148   484.2   339.8  0.378512   4.00     27950  CORRECT
+   70000   0.4217   0.4070  +0.0147   484.3   339.6  0.374058   4.00     30100  CORRECT
+   75000   0.4216   0.4070  +0.0146   484.4   339.8  0.372864   4.00     32250  CORRECT
+   80000   0.4216   0.4071  +0.0145   484.5   339.2  0.379688   4.00     34400  CORRECT
+   85000   0.4216   0.4072  +0.0144   484.7   338.9  0.378699   4.00     36550  CORRECT
+   90000   0.4216   0.4073  +0.0142   484.8   339.1  0.381833   4.00     38700  CORRECT
+   95000   0.4215   0.4074  +0.0141   484.9   340.9  0.380037   4.00     40850  CORRECT
+  100000   0.4215   0.4075  +0.0140   485.1   339.7  0.374096   4.00     43000  CORRECT
+
+  Per-checkpoint top 3 activated:
+    iter  5000: [reasoning_standalone_6(358), reasoning_standalone_12(338), reasoning_analyze_a(331)]
+    iter 10000: [reasoning_standalone_6(614), reasoning_standalone_12(614), reasoning_analyze_a(580)]
+    iter 15000: [reasoning_standalone_12(865), reasoning_standalone_6(857), deep_resolve_a(819)]
+    iter 20000: [reasoning_standalone_12(1112), reasoning_standalone_6(1088), deep_resolve_a(1049)]
+    iter 25000: [reasoning_standalone_12(1338), reasoning_standalone_6(1294), reasoning_standalone_1(1284)]
+    iter 30000: [reasoning_standalone_12(1566), reasoning_standalone_6(1549), reasoning_standalone_1(1511)]
+    iter 35000: [reasoning_standalone_12(1806), reasoning_standalone_6(1795), reasoning_standalone_1(1766)]
+    iter 40000: [reasoning_standalone_12(2058), reasoning_standalone_6(2032), reasoning_standalone_1(2014)]
+    iter 45000: [reasoning_standalone_6(2293), reasoning_standalone_12(2274), reasoning_standalone_1(2263)]
+    iter 50000: [reasoning_standalone_6(2539), reasoning_standalone_12(2521), reasoning_standalone_1(2519)]
+    iter 55000: [reasoning_standalone_6(2762), reasoning_standalone_12(2732), reasoning_standalone_1(2724)]
+    iter 60000: [reasoning_standalone_6(2994), reasoning_standalone_12(2986), reasoning_standalone_1(2952)]
+    iter 65000: [reasoning_standalone_6(3218), reasoning_standalone_12(3193), reasoning_standalone_1(3168)]
+    iter 70000: [reasoning_standalone_6(3432), reasoning_standalone_12(3420), reasoning_standalone_1(3396)]
+    iter 75000: [reasoning_standalone_6(3662), reasoning_standalone_12(3633), reasoning_standalone_1(3603)]
+    iter 80000: [reasoning_standalone_6(3901), reasoning_standalone_12(3850), reasoning_standalone_1(3829)]
+    iter 85000: [reasoning_standalone_6(4141), reasoning_standalone_1(4071), reasoning_standalone_12(4065)]
+    iter 90000: [reasoning_standalone_6(4355), reasoning_standalone_1(4307), reasoning_standalone_12(4302)]
+    iter 95000: [reasoning_standalone_6(4594), reasoning_standalone_12(4510), reasoning_standalone_2(4505)]
+    iter 100000: [reasoning_standalone_6(4802), reasoning_standalone_12(4713), reasoning_standalone_2(4703)]
+
+  ORDERING: CORRECT at iteration 100000 (gap=+0.0140)
+  Final weight norm: 824.7277
+  Total contrastive updates: 43000
+
+─── Population-Aware Calibration on Text (mode=Inference) ───
+  Simple mean confidence:    0.4855
+  Moderate mean confidence:  0.4563
+  Complex mean confidence:   0.6320
+  Surface threshold (midpt): 0.5588
+  Reasoning threshold (p40): 0.4255
+
+  Expected escalation rates:
+    Simple:   81.2% would escalate
+    Moderate: 90.0% would escalate
+    Complex:  35.0% would escalate
+  Discrimination metric: complex/simple = 0.4x
+  DISCRIMINATION: FAIL (< 2x)
+
+─── Validation Bench: 105 sentences ───
+
+  Validation Tier Distribution:
+       Surface:   26 (24.8%)
+     Reasoning:   49 (46.7%)
+          Deep:   30 (28.6%)
+
+  Per-complexity breakdown:
+        simple: S 22%  R 58%  D 20%  (n=40)
+      moderate: S 3%  R 52%  D 45%  (n=33)
+       complex: S 50%  R 28%  D 22%  (n=32)
+
+  Traversal Directions:
+    Forward:   1523 (53.8%)
+    Lateral:   1215 (42.9%)
+    Feedback:    17 (0.6%)
+    Temporal:    75 (2.7%)
+  Lateral: 1185 attempted, 0 prevented escalation
+  Feedback signals: 17
+
+  All 105 sentences ranked by Surface confidence (descending):
+  rank  s_conf    conf        tier  sentence
+  ────  ──────  ──────  ──────────  ────────────────────────────────────────────────────────────
+     1  0.9040  0.9040     Surface  [C] kolmogorov complexity offers an objective measure of ra...
+     2  0.8846  0.8846     Surface  [C] Bayesian nonparametric models allow the complexity of s...
+     3  0.8816  0.8816     Surface  [C] the no free lunch theorem establishes that no single op...
+     4  0.8781  0.8781     Surface  [C] the frame problem in artificial intelligence reveals ho...
+     5  0.8670  0.8670     Surface  [C] ergodic theory studies the long term statistical behavi...
+     6  0.8575  0.8575     Surface  [C] modal logic extends propositional logic with operators ...
+     7  0.8522  0.8522     Surface  [C] topological quantum computing encodes information in br...
+     8  0.8382  0.8382     Surface  [C] the Curry Howard correspondence reveals a deep isomorph...
+     9  0.8115  0.8115     Surface  [C] the Chinese room argument challenges the notion that sy...
+    10  0.8114  0.8114     Surface  [C] the church turing thesis equates mechanical computation...
+    11  0.8109  0.8109     Surface  [S] trees grow tall
+    12  0.7933  0.7933     Surface  [C] causal inference frameworks distinguish genuine cause a...
+    13  0.7928  0.7928     Surface  [C] the underdetermination of scientific theory by empirica...
+    14  0.7889  0.7889     Surface  [M] reinforcement learning agents maximise cumulative rewar...
+    15  0.7647  0.7647     Surface  [C] the renormalisation group explains how physical systems...
+    16  0.7331  0.7331     Surface  [S] the sun is bright
+    17  0.7321  0.7321     Surface  [S] the milk is cold
+    18  0.7314  0.7314     Surface  [S] the door is open
+    19  0.7306  0.7306     Surface  [S] the soup is hot
+    20  0.7295  0.7295     Surface  [S] the sky is blue
+    21  0.7038  0.7038     Surface  [S] the cat chased the mouse
+    22  0.7005  0.7005     Surface  [C] the symbol grounding problem questions how formal symbo...
+    23  0.7002  0.7002     Surface  [C] algorithmic information theory unifies computation prob...
+    24  0.6101  0.6101     Surface  [S] it snowed last night
+    25  0.6085  0.6085     Surface  [S] she sings every morning
+    26  0.5629  0.5629     Surface  [C] the binding problem asks how distributed neural represe...
+    27  0.5090  0.8211   Reasoning  [S] she wore a blue dress
+    28  0.4559  0.8425   Reasoning  [S] the train arrived on time
+    29  0.4339  0.8312   Reasoning  [S] he fixed the broken chair
+    30  0.4325  0.8319   Reasoning  [S] he painted the fence white
+    31  0.4317  0.7947        Deep  [S] she walked to the store
+    32  0.4297  0.7987        Deep  [S] they watched a movie last night
+    33  0.4295  0.7609        Deep  [S] she closed the window
+    34  0.4286  0.8281   Reasoning  [S] we went to the park
+    35  0.4284  0.8254   Reasoning  [S] rain makes the grass green
+    36  0.4278  0.8311   Reasoning  [S] the baby sleeps quietly
+    37  0.4273  0.8358   Reasoning  [S] the children ran outside
+    38  0.4272  0.8297   Reasoning  [S] the clock struck twelve
+    39  0.4259  0.8197   Reasoning  [S] he ate lunch at noon
+    40  0.4257  0.8233   Reasoning  [S] birds fly south in winter
+    41  0.4257  0.8348   Reasoning  [S] the flowers are blooming
+    42  0.4255  0.8264   Reasoning  [S] the wind blows gently
+    43  0.4254  0.7865        Deep  [S] fish swim in the sea
+    44  0.4229  0.8195   Reasoning  [S] bread is made from flour
+    45  0.4227  0.8156   Reasoning  [S] he reads a book
+    46  0.4226  0.8264   Reasoning  [S] snow falls in december
+    47  0.4212  0.7445        Deep  [S] the dog runs fast
+    48  0.4211  0.8279   Reasoning  [S] we ate dinner together
+    49  0.4200  0.7850        Deep  [S] it is raining today
+    50  0.4190  0.8447   Reasoning  [M] binary search reduces the search space by half with eac...
+    51  0.4179  0.8189   Reasoning  [S] coffee keeps me awake
+    52  0.4178  0.8158   Reasoning  [S] my dog likes bones
+    53  0.4176  0.8169   Reasoning  [S] the cat sat on the mat
+    54  0.4166  0.8498   Reasoning  [M] hash functions map arbitrary input to fixed size output...
+    55  0.4166  0.8488   Reasoning  [C] the halting problem demonstrates fundamental limits of ...
+    56  0.4147  0.8076        Deep  [M] the stock market fluctuates based on investor sentiment...
+    57  0.4146  0.8095   Reasoning  [S] she likes green apples
+    58  0.4140  0.8404   Reasoning  [M] version control systems track changes and enable collab...
+    59  0.4130  0.8134        Deep  [M] operating systems manage hardware resources and provide...
+    60  0.4129  0.8111        Deep  [M] concurrency control mechanisms ensure data consistency ...
+    61  0.4124  0.8063        Deep  [M] parallel computing enables processing of large datasets...
+    62  0.4120  0.8076        Deep  [M] network protocols define rules for data exchange betwee...
+    63  0.4120  0.8065        Deep  [M] load balancing distributes incoming requests across mul...
+    64  0.4116  0.8061        Deep  [M] event driven architectures decouple producers and consu...
+    65  0.4114  0.8358   Reasoning  [M] type systems provide compile time guarantees about prog...
+    66  0.4113  0.8045   Reasoning  [S] the car is red
+    67  0.4104  0.8191        Deep  [C] quantum entanglement challenges classical notions of lo...
+    68  0.4103  0.8415   Reasoning  [M] natural language processing bridges the gap between hum...
+    69  0.4092  0.8112        Deep  [M] distributed systems must handle network partitions and ...
+    70  0.4088  0.8101        Deep  [M] gradient descent optimises model parameters by followin...
+    71  0.4086  0.7514        Deep  [S] hello world
+    72  0.4084  0.8489   Reasoning  [C] the relationship between syntactic structure and semant...
+    73  0.4078  0.7577        Deep  [S] water flows downhill
+    74  0.4066  0.8393   Reasoning  [M] recursive algorithms solve problems by breaking them in...
+    75  0.4058  0.8060        Deep  [M] the relationship between correlation and causation is f...
+    76  0.4056  0.8389   Reasoning  [M] the efficiency of sorting algorithms depends on input d...
+    77  0.4054  0.7725   Reasoning  [M] data normalisation reduces redundancy and improves inte...
+    78  0.4051  0.8042        Deep  [C] the tension between expressiveness and decidability sha...
+    79  0.4046  0.8311   Reasoning  [M] memory management in systems programming prevents resou...
+    80  0.4045  0.8463   Reasoning  [C] the boundary between deterministic chaos and true rando...
+    81  0.4031  0.8139        Deep  [C] emergence in complex adaptive systems suggests that red...
+    82  0.4029  0.8383   Reasoning  [C] the recursive nature of self-referential systems create...
+    83  0.4020  0.8277   Reasoning  [M] genetic algorithms evolve solutions through mutation cr...
+    84  0.4009  0.8442   Reasoning  [C] the interplay between cooperation and competition in ev...
+    85  0.4008  0.7750   Reasoning  [C] goedel's incompleteness theorems reveal inherent limita...
+    86  0.4007  0.8018        Deep  [M] urban planning requires balancing economic growth with ...
+    87  0.3990  0.8298   Reasoning  [C] the measurement problem in quantum mechanics exposes de...
+    88  0.3980  0.7960        Deep  [M] regularisation techniques prevent overfitting by penali...
+    89  0.3979  0.8363   Reasoning  [C] information theoretic entropy quantifies uncertainty an...
+    90  0.3974  0.8324   Reasoning  [M] containerisation isolates applications and their depend...
+    91  0.3971  0.8319   Reasoning  [C] computational irreducibility implies that some processe...
+    92  0.3964  0.7697   Reasoning  [M] continuous integration automates testing and building s...
+    93  0.3962  0.7942        Deep  [C] category theory provides a unifying framework for mathe...
+    94  0.3960  0.7981        Deep  [M] compiler optimisation transforms source code into effic...
+    95  0.3957  0.8225        Deep  [C] consciousness remains an unsolved problem at the inters...
+    96  0.3956  0.8025   Reasoning  [S] they played football after school
+    97  0.3945  0.7922        Deep  [M] neural networks approximate complex nonlinear functions...
+    98  0.3941  0.8314   Reasoning  [M] machine learning models require significant computation...
+    99  0.3941  0.8315   Reasoning  [M] microservice architectures introduce complexity in exch...
+   100  0.3919  0.8299   Reasoning  [M] database indexing strategies significantly impact query...
+   101  0.3882  0.8156        Deep  [C] non equilibrium thermodynamics describes systems far fr...
+   102  0.3881  0.7984        Deep  [M] functional programming emphasises immutability and comp...
+   103  0.3872  0.8276   Reasoning  [M] cryptographic protocols ensure secure communication ove...
+   104  0.3853  0.8236   Reasoning  [M] sustainable energy solutions demand innovative engineer...
+   105  0.3817  0.8232        Deep  [C] strange attractors in dynamical systems exhibit sensiti...
+
+  Surface confidence by complexity:
+         group      n    mean     std     min     max
+        simple     40  0.4900  0.1230  0.3956  0.8109
+      moderate     33  0.4158  0.0666  0.3853  0.7889
+       complex     32  0.6034  0.2120  0.3817  0.9040
+
+  Confidence gaps:
+    simple - moderate:  +0.0743  CORRECT
+    moderate - complex: -0.1876  inverted
+    simple - complex:   -0.1134  inverted
+
+  Tier routing by complexity:
+        simple: S  9/40 ( 22.5%)  R 23/40 ( 57.5%)  D  8/40 ( 20.0%)
+      moderate: S  1/33 (  3.0%)  R 17/33 ( 51.5%)  D 15/33 ( 45.5%)
+       complex: S 16/32 ( 50.0%)  R  9/32 ( 28.1%)  D  7/32 ( 21.9%)
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                  Fourteen-Phase Comparison Table                          │
+  ├─────────┬────────────────────────────────────────────────────────────────┤
+  │ Phase   │ Result                                                         │
+  ├─────────┼────────────────────────────────────────────────────────────────┤
+  │  4      │ simple 13% S, complex 47% S — inverted pre-learning            │
+  │  5      │ 100% S everything — over-converged                             │
+  │  6      │ simple 20% S, complex 71% S — inverted post-contrastive        │
+  │  7      │ simple 73% S, complex 88% S — inverted post-synthetic          │
+  │  8      │ simple 13% S, complex 100% S — inverted text-only              │
+  │  9      │ simple 0% S, complex 100% S — cosine init, training broke it   │
+  │ 10      │ simple 0% S, complex 100% S — Oja overwrites discrimination    │
+  │ 11      │ simple 93% S, complex 94% S — CORRECT analytical frozen Surf   │
+  │ 12      │ simple 93% S, complex 53% S — CORRECT richer encoder frozen    │
+  │ 13      │ simple 100% S, complex 100% S — coalition formation, no discr. │
+  │ 14      │ simple 22% S, complex 50% S — inverted                               │
+  └─────────┴────────────────────────────────────────────────────────────────┘
+
+  VERDICT: Ordering INVERTED (simple <= complex)
+    Surface threshold: 0.5588
+
+─── Adversarial Pass (41 sentences, G5=0.35) ───
+  rank  s_conf    conf        tier    expect  correct  sentence
+  ────  ──────  ──────  ──────────  ────────  ───────  ───────────────────────────────────────────────────────
+     1  0.3918  0.7990   Reasoning   complex      yes  Cogito ergo sum
+        coalition: [deep_standalone_0(Deep, bid=0.672, conf=0.748, FIRED), reasoning_analyze_a(Reasoning, bid=0.796, conf=0.799, FIRED), reasoning_analyze_c(Reasoning, bid=0.797, conf=0.799, FIRED), reasoning_standalone_0(Reasoning, bid=0.656, conf=0.701, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+     2  0.3868  0.8073   Reasoning   complex      yes  Gödel's proof breaks mathematics
+        coalition: [reasoning_standalone_11(Reasoning, bid=0.730, conf=0.723, FIRED), reasoning_standalone_9(Reasoning, bid=0.716, conf=0.719, FIRED), reasoning_analyze_c(Reasoning, bid=0.824, conf=0.807, FIRED), deep_standalone_0(Deep, bid=0.732, conf=0.765, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+     3  0.3830  0.7995   Reasoning   complex      yes  Being precedes essence
+        coalition: [reasoning_standalone_1(Reasoning, bid=0.655, conf=0.700, FIRED), reasoning_analyze_a(Reasoning, bid=0.798, conf=0.800, FIRED), deep_standalone_6(Deep, bid=0.681, conf=0.750, FIRED), deep_resolve_b(Deep, bid=0.797, conf=0.764, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+     4  0.4170  0.8259   Reasoning   complex      yes  time is relative
+        coalition: [deep_standalone_0(Deep, bid=0.736, conf=0.767, FIRED), reasoning_analyze_b(Reasoning, bid=0.886, conf=0.826, FIRED), reasoning_standalone_11(Reasoning, bid=0.723, conf=0.721, FIRED), reasoning_standalone_2(Reasoning, bid=0.734, conf=0.724, FIRED)] → resolved_by=reasoning_analyze_b cross_tier=false
+     5  0.4006  0.7765        Deep   complex      yes  maps are not territories
+        coalition: [reasoning_standalone_1(Reasoning, bid=0.734, conf=0.724, FIRED), reasoning_standalone_6(Reasoning, bid=0.775, conf=0.736, FIRED), deep_standalone_0(Deep, bid=0.768, conf=0.777, FIRED), reasoning_standalone_13(Reasoning, bid=0.759, conf=0.732, FIRED)] → resolved_by=deep_standalone_0 cross_tier=true
+     6  0.4021  0.7685        Deep   complex      yes  meaning requires context
+        coalition: [deep_standalone_6(Deep, bid=0.719, conf=0.762, FIRED), reasoning_standalone_4(Reasoning, bid=0.744, conf=0.727, FIRED), deep_standalone_0(Deep, bid=0.742, conf=0.769, FIRED), reasoning_standalone_15(Reasoning, bid=0.736, conf=0.725, FIRED)] → resolved_by=deep_standalone_0 cross_tier=true
+     7  0.8063  0.8063     Surface   complex       no  logic precedes language
+     8  0.4014  0.8255   Reasoning   complex      yes  infinity is countable sometimes
+        coalition: [reasoning_standalone_6(Reasoning, bid=0.815, conf=0.749, FIRED), deep_resolve_a(Deep, bid=0.883, conf=0.790, FIRED), reasoning_analyze_c(Reasoning, bid=0.885, conf=0.825, FIRED), reasoning_standalone_4(Reasoning, bid=0.802, conf=0.745, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+     9  0.8959  0.8959     Surface    simple      yes  the big red dog ran quickly down the long straight road...
+    10  0.4981  0.7757   Reasoning    simple       no  the little grey cat sat on the soft warm mat by the big...
+        coalition: [reasoning_standalone_12(Reasoning, bid=0.906, conf=0.776, FIRED), reasoning_standalone_9(Reasoning, bid=0.900, conf=0.774, FIRED), reasoning_standalone_13(Reasoning, bid=0.889, conf=0.771, FIRED), deep_resolve_b(Deep, bid=0.826, conf=0.773, FIRED)] → resolved_by=reasoning_standalone_12 cross_tier=false
+    11  0.4170  0.8489   Reasoning    simple       no  my grandmother bakes the most delicious chocolate chip ...
+        coalition: [reasoning_analyze_c(Reasoning, bid=0.963, conf=0.849, FIRED), reasoning_standalone_13(Reasoning, bid=0.909, conf=0.777, FIRED), reasoning_standalone_9(Reasoning, bid=0.881, conf=0.768, FIRED), deep_standalone_6(Deep, bid=0.886, conf=0.812, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    12  0.3876  0.8196   Reasoning    simple       no  the tintinnabulation resonated melodiously
+        coalition: [reasoning_standalone_15(Reasoning, bid=0.776, conf=0.737, FIRED), reasoning_analyze_c(Reasoning, bid=0.865, conf=0.820, FIRED), deep_standalone_7(Deep, bid=0.780, conf=0.780, FIRED), reasoning_standalone_13(Reasoning, bid=0.798, conf=0.744, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    13  0.3811  0.8118   Reasoning    simple       no  photosynthesis converts sunlight efficiently
+        coalition: [reasoning_standalone_15(Reasoning, bid=0.774, conf=0.736, FIRED), reasoning_analyze_c(Reasoning, bid=0.839, conf=0.812, FIRED), reasoning_standalone_6(Reasoning, bid=0.798, conf=0.743, FIRED), reasoning_standalone_12(Reasoning, bid=0.758, conf=0.731, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    14  0.3964  0.7770        Deep   complex      yes  the cat that the dog that the man owned chased sat on t...
+        coalition: [reasoning_standalone_6(Reasoning, bid=0.871, conf=0.765, FIRED), reasoning_standalone_0(Reasoning, bid=0.867, conf=0.764, FIRED), deep_resolve_b(Deep, bid=0.840, conf=0.777, FIRED), deep_resolve_a(Deep, bid=0.840, conf=0.777, FIRED)] → resolved_by=deep_resolve_a cross_tier=true
+    15  0.4137  0.7870        Deep   complex      yes  she said that he thought that they believed it was true
+        coalition: [reasoning_standalone_6(Reasoning, bid=0.864, conf=0.763, FIRED), reasoning_standalone_12(Reasoning, bid=0.844, conf=0.757, FIRED), deep_resolve_a(Deep, bid=0.873, conf=0.787, FIRED), reasoning_standalone_4(Reasoning, bid=0.867, conf=0.764, FIRED)] → resolved_by=deep_resolve_a cross_tier=true
+    16  0.4087  0.8423   Reasoning   complex      yes  the mitochondrial electron transport chain couples prot...
+        coalition: [reasoning_standalone_4(Reasoning, bid=0.892, conf=0.772, FIRED), reasoning_analyze_a(Reasoning, bid=0.941, conf=0.842, FIRED), reasoning_standalone_13(Reasoning, bid=0.896, conf=0.773, FIRED), reasoning_standalone_12(Reasoning, bid=0.866, conf=0.764, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+    17  0.4074  0.8207        Deep   complex      yes  genome wide association studies identify statistical co...
+        coalition: [reasoning_standalone_6(Reasoning, bid=0.924, conf=0.781, FIRED), reasoning_standalone_13(Reasoning, bid=0.920, conf=0.780, FIRED), reasoning_standalone_1(Reasoning, bid=0.864, conf=0.763, FIRED), deep_standalone_0(Deep, bid=0.916, conf=0.821, FIRED)] → resolved_by=deep_standalone_0 cross_tier=true
+    18  0.4332  0.8433   Reasoning   complex      yes  the horse raced past the barn fell
+        coalition: [deep_resolve_a(Deep, bid=0.945, conf=0.809, FIRED), deep_standalone_7(Deep, bid=0.810, conf=0.789, FIRED), reasoning_standalone_6(Reasoning, bid=0.817, conf=0.749, FIRED), reasoning_analyze_b(Reasoning, bid=0.944, conf=0.843, FIRED)] → resolved_by=reasoning_analyze_b cross_tier=false
+    19  0.8581  0.8581     Surface   complex       no  the old man the boats
+    20  0.4256  0.8322   Reasoning   complex      yes  time flies like an arrow but fruit flies like a banana
+        coalition: [reasoning_standalone_6(Reasoning, bid=0.800, conf=0.744, FIRED), deep_resolve_a(Deep, bid=0.907, conf=0.797, FIRED), reasoning_standalone_1(Reasoning, bid=0.748, conf=0.729, FIRED), reasoning_analyze_a(Reasoning, bid=0.907, conf=0.832, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+    21  0.3983  0.8292   Reasoning   complex      yes  neural networks approximate complex nonlinear functions...
+        coalition: [deep_standalone_0(Deep, bid=0.840, conf=0.798, FIRED), reasoning_analyze_c(Reasoning, bid=0.897, conf=0.829, FIRED), reasoning_standalone_2(Reasoning, bid=0.849, conf=0.759, FIRED), reasoning_standalone_0(Reasoning, bid=0.827, conf=0.752, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    22  0.4200  0.8195   Reasoning    simple       no  it is raining today
+        coalition: [deep_standalone_6(Deep, bid=0.695, conf=0.754, FIRED), deep_resolve_a(Deep, bid=0.867, conf=0.785, FIRED), reasoning_standalone_6(Reasoning, bid=0.719, conf=0.720, FIRED), reasoning_analyze_c(Reasoning, bid=0.865, conf=0.819, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    23  0.4092  0.8043        Deep   complex      yes  the interplay between cooperation and competition drive...
+        coalition: [reasoning_standalone_4(Reasoning, bid=0.879, conf=0.768, FIRED), reasoning_standalone_13(Reasoning, bid=0.886, conf=0.770, FIRED), reasoning_standalone_2(Reasoning, bid=0.876, conf=0.767, FIRED), deep_resolve_b(Deep, bid=0.931, conf=0.804, FIRED)] → resolved_by=deep_resolve_b cross_tier=true
+    24  0.7295  0.7295     Surface    simple      yes  the sky is blue
+    25  0.4078  0.8138   Reasoning    simple       no  water flows downhill
+        coalition: [reasoning_analyze_a(Reasoning, bid=0.846, conf=0.814, FIRED), reasoning_standalone_9(Reasoning, bid=0.680, conf=0.708, FIRED), reasoning_analyze_b(Reasoning, bid=0.846, conf=0.814, FIRED), reasoning_standalone_15(Reasoning, bid=0.697, conf=0.713, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+    26  0.4129  0.8473   Reasoning   complex      yes  consciousness remains one of the most profound unsolved...
+        coalition: [reasoning_analyze_c(Reasoning, bid=0.958, conf=0.847, FIRED), reasoning_standalone_11(Reasoning, bid=0.883, conf=0.769, FIRED), reasoning_standalone_2(Reasoning, bid=0.892, conf=0.772, FIRED), deep_standalone_0(Deep, bid=0.886, conf=0.812, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    27  0.3881  0.7839   Reasoning    simple       no  if then else
+        coalition: [deep_standalone_7(Deep, bid=0.671, conf=0.747, FIRED), deep_standalone_0(Deep, bid=0.678, conf=0.750, FIRED), reasoning_standalone_9(Reasoning, bid=0.653, conf=0.700, FIRED), reasoning_analyze_b(Reasoning, bid=0.746, conf=0.784, FIRED)] → resolved_by=reasoning_analyze_b cross_tier=false
+    28  0.4112  0.8072        Deep  moderate        —  the mitochondria is the powerhouse of the cell
+        coalition: [reasoning_standalone_0(Reasoning, bid=0.836, conf=0.755, FIRED), deep_resolve_a(Deep, bid=0.941, conf=0.807, FIRED), reasoning_standalone_15(Reasoning, bid=0.836, conf=0.755, FIRED), reasoning_standalone_9(Reasoning, bid=0.820, conf=0.750, FIRED)] → resolved_by=deep_resolve_a cross_tier=true
+    29  0.8661  0.8661     Surface   complex       no  dark matter constitutes approximately twenty seven perc...
+    30  0.4103  0.7968   Reasoning    simple       no  she runs fast
+        coalition: [deep_standalone_0(Deep, bid=0.618, conf=0.731, FIRED), deep_resolve_b(Deep, bid=0.792, conf=0.763, FIRED), reasoning_analyze_b(Reasoning, bid=0.789, conf=0.797, FIRED), reasoning_analyze_c(Reasoning, bid=0.789, conf=0.797, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    31  0.3751  0.7650   Reasoning    simple       no  go
+        coalition: [reasoning_standalone_2(Reasoning, bid=0.518, conf=0.660, FIRED), reasoning_analyze_b(Reasoning, bid=0.683, conf=0.765, FIRED), reasoning_standalone_1(Reasoning, bid=0.490, conf=0.651, FIRED), reasoning_standalone_4(Reasoning, bid=0.525, conf=0.661, FIRED)] → resolved_by=reasoning_analyze_b cross_tier=false
+    32  0.4008  0.7894        Deep   complex      yes  I saw the man with the telescope
+        coalition: [reasoning_standalone_2(Reasoning, bid=0.776, conf=0.737, FIRED), deep_resolve_b(Deep, bid=0.881, conf=0.789, FIRED), reasoning_standalone_4(Reasoning, bid=0.779, conf=0.738, FIRED), deep_standalone_6(Deep, bid=0.765, conf=0.775, FIRED)] → resolved_by=deep_resolve_b cross_tier=true
+    33  0.4271  0.8087        Deep   complex      yes  the complex houses married and single soldiers and thei...
+        coalition: [reasoning_standalone_4(Reasoning, bid=0.879, conf=0.768, FIRED), deep_standalone_0(Deep, bid=0.876, conf=0.809, FIRED), reasoning_standalone_0(Reasoning, bid=0.863, conf=0.763, FIRED), reasoning_standalone_12(Reasoning, bid=0.858, conf=0.761, FIRED)] → resolved_by=deep_standalone_0 cross_tier=true
+    34  0.4128  0.7089   Reasoning   complex      yes  we saw her duck
+        coalition: [reasoning_standalone_4(Reasoning, bid=0.673, conf=0.706, FIRED), reasoning_standalone_15(Reasoning, bid=0.665, conf=0.703, FIRED), reasoning_standalone_2(Reasoning, bid=0.667, conf=0.704, FIRED), reasoning_standalone_13(Reasoning, bid=0.683, conf=0.709, FIRED)] → resolved_by=reasoning_standalone_13 cross_tier=false
+    35  0.4230  0.8084        Deep   complex      yes  the cotton clothing is made of grows in Mississippi
+        coalition: [deep_resolve_b(Deep, bid=0.945, conf=0.808, FIRED), deep_standalone_7(Deep, bid=0.831, conf=0.795, FIRED), reasoning_standalone_11(Reasoning, bid=0.826, conf=0.752, FIRED), reasoning_standalone_4(Reasoning, bid=0.838, conf=0.755, FIRED)] → resolved_by=deep_resolve_b cross_tier=true
+    36  0.4145  0.8089        Deep   complex      yes  the prime number theorem describes the asymptotic distr...
+        coalition: [deep_resolve_a(Deep, bid=0.944, conf=0.808, FIRED), deep_standalone_7(Deep, bid=0.876, conf=0.809, FIRED), reasoning_standalone_12(Reasoning, bid=0.855, conf=0.761, FIRED), reasoning_standalone_2(Reasoning, bid=0.884, conf=0.769, FIRED)] → resolved_by=deep_standalone_7 cross_tier=true
+    37  0.4184  0.8102   Reasoning    simple       no  he gave her cat food
+        coalition: [deep_resolve_b(Deep, bid=0.836, conf=0.776, FIRED), reasoning_analyze_c(Reasoning, bid=0.834, conf=0.810, FIRED), reasoning_standalone_12(Reasoning, bid=0.667, conf=0.704, FIRED), reasoning_standalone_1(Reasoning, bid=0.635, conf=0.694, FIRED)] → resolved_by=reasoning_analyze_c cross_tier=false
+    38  0.4305  0.8479   Reasoning    simple       no  the big fluffy white dog played happily in the sunny gr...
+        coalition: [deep_standalone_7(Deep, bid=0.863, conf=0.805, FIRED), reasoning_standalone_4(Reasoning, bid=0.866, conf=0.764, FIRED), reasoning_standalone_12(Reasoning, bid=0.848, conf=0.758, FIRED), reasoning_analyze_a(Reasoning, bid=0.960, conf=0.848, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+    39  0.4132  0.7732        Deep    simple       no  they ate pizza
+        coalition: [deep_resolve_b(Deep, bid=0.827, conf=0.773, FIRED), reasoning_standalone_2(Reasoning, bid=0.656, conf=0.701, FIRED), reasoning_standalone_12(Reasoning, bid=0.654, conf=0.700, FIRED), reasoning_standalone_15(Reasoning, bid=0.653, conf=0.700, FIRED)] → resolved_by=deep_resolve_b cross_tier=true
+    40  0.4288  0.8452   Reasoning    simple       no  she danced gracefully across the wooden stage
+        coalition: [deep_standalone_7(Deep, bid=0.833, conf=0.796, FIRED), reasoning_analyze_b(Reasoning, bid=0.951, conf=0.845, FIRED), reasoning_standalone_4(Reasoning, bid=0.842, conf=0.757, FIRED), reasoning_analyze_a(Reasoning, bid=0.951, conf=0.845, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+    41  0.4260  0.8309   Reasoning    simple       no  the lamp is on the table
+        coalition: [reasoning_standalone_13(Reasoning, bid=0.742, conf=0.726, FIRED), deep_standalone_6(Deep, bid=0.726, conf=0.764, FIRED), reasoning_standalone_0(Reasoning, bid=0.729, conf=0.723, FIRED), reasoning_analyze_a(Reasoning, bid=0.903, conf=0.831, FIRED)] → resolved_by=reasoning_analyze_a cross_tier=false
+
+  Adversarial score: 23/40 correct (57.5%)
+  Phase 12 baseline (original 17 scored): 8/17 (47.1%)
+  Delta: +3 (IMPROVED)
+
+─── Stage 5: Coalition Diagrams (escalated adversarial sentences) ───
+
+  "Cogito ergo sum"  [expected: complex]
+  Surface confidence: 0.3918 (threshold: 0.5588) → ESCALATE
+  ┌─────────────────────────────────────────────┐
+  │  INPUT  ──→  BIDDING (18 R+D nodes)          │
+  │                  │                           │
+  │                   deep_resolve_b bid=0.797     │
+  │              reasoning_analyze_a bid=0.796 ★   │
+  │                   deep_resolve_a bid=0.797     │
+  │                deep_standalone_7 bid=0.668     │
+  │                  │                           │
+  │          resolved_by:  reasoning_analyze_a   │
+  │          tier: Reasoning  conf: 0.7989            │
+  └─────────────────────────────────────────────┘
+  Final: tier=Reasoning, confidence=0.7989
+
+  "photosynthesis converts sunlight efficiently"  [expected: simple]
+  Surface confidence: 0.3811 (threshold: 0.5588) → ESCALATE
+  ┌─────────────────────────────────────────────┐
+  │  INPUT  ──→  BIDDING (18 R+D nodes)          │
+  │                  │                           │
+  │             reasoning_standalone_13 bid=0.803     │
+  │             reasoning_standalone_1 bid=0.721     │
+  │                   deep_resolve_a bid=0.837 ★   │
+  │             reasoning_standalone_11 bid=0.771     │
+  │                  │                           │
+  │          CROSS-TIER BLEND (0.3R + 0.7D)     │
+  │                  │                           │
+  │          resolved_by:       deep_resolve_a   │
+  │          tier: Deep  conf: 0.7760            │
+  └─────────────────────────────────────────────┘
+  Final: tier=Deep, confidence=0.7760
+
+─── Phase 14: Three Questions ───
+
+  Q1: Did G5 structural features improve adversarial routing?
+      Adversarial score: 23/40 (57.5%) vs Phase 12 baseline 47.1%
+      YES — G5 magnitude penalty correctly escalates sentences
+      with complex syntactic structure (nested clauses, garden paths).
+      The penalty exploits G5 norm differences that cosine similarity
+      alone cannot detect. Three new correct escalations:
+      nested clauses, multi-level embedding, prepositional depth.
+
+  Q2: What are the remaining failure modes?
+      Three categories resist G5 correction:
+      (a) Very short complex: "Cogito ergo sum" — too few tokens
+          for structural features to register. G5 norm ≈ simple.
+      (b) Long simple: high token count inflates G5 norm, causing
+          false penalty. Length and structural complexity conflated.
+      (c) Domain-encoded complexity: "neural networks approximate..."
+          — complexity is semantic (domain expertise), not syntactic.
+          No structural feature can detect this without world knowledge.
+
+  Q3: What should Phase 15 prioritise?
+      The G5 penalty reaches a natural ceiling. Remaining failures
+      require sentence-level semantic understanding that vocabulary-
+      independent features cannot provide. Options:
+      (a) Attention mechanism — weight tokens by contextual relevance
+      (b) Per-class G5 calibration — separate norms for short/long
+      (c) Recursive feature extraction — parse tree depth estimation
+      (d) Accept current ceiling and focus on R+D specialisation
+
+═══════════════════ PHASE 14 FINAL SUMMARY ═══════════════════
+  Total parameters:        1205376
+  Training iterations:     100000
+  G5 penalty weight:       0.35
+  G5 norms:                simple=1.2257  complex=2.5947
+  Surface weight norm:     482.9206 (constant — frozen)
+  R+D weight norm:         341.8072 (final)
+  Confidence std dev:      0.126970
+  Weight drift:            822.4496 -> 824.7277 (0.28%)
+  Coalitions formed:       20191
+  Mean coalition size:     4.00
+  R+D pairwise |cos|:      0.003218 -> 0.374096
+  Adversarial score:       23/40 (57.5%)
+  Logs: axiom_*_log.json, axiom_coalition_log.json, axiom_validation.json
+═══════════════════════════════════════════════════════════════
+
+─── Auto-Tuner ───
+  Rationale: Deep 9.4% < 10% → lowered reasoning_base_confidence to 0.70; Cache 0.0% < 25% → lowered cache threshold to 0.91; Surface 79.8% > 70% → raised surface threshold to 0.87
+  Written: axiom_config.json
