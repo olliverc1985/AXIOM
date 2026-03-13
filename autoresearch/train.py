@@ -628,7 +628,9 @@ def confidence(encoding, surface_weight, g5_stats):
     poly_signal = encoding[114] / G4_AMP
     # Char entropy penalty: G4 dim 14 = character entropy (index 115, amp 2.0)
     entropy_signal = encoding[115] / G4_AMP
-    conf = max(0.0, conf - acad_signal * 0.3 - poly_signal * 0.2 - entropy_signal * 0.15)
+    # Rare word ratio: G4 dim 10 = rare_ratio (index 111, amp 2.0)
+    rare_signal = encoding[111] / G4_AMP
+    conf = max(0.0, conf - acad_signal * 0.3 - poly_signal * 0.2 - entropy_signal * 0.15 - rare_signal * 0.15)
 
     return max(0.0, min(1.0, conf))
 
