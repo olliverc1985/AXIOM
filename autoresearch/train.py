@@ -622,15 +622,30 @@ def confidence(encoding, surface_weight, g5_stats):
     cos = cosine_sim(encoding, surface_weight)
     conf = cos
 
-    # Academic word penalty: G4 dim 12 = academic suffix ratio (index 113, amp 2.0)
-    acad_signal = encoding[113] / G4_AMP  # un-amplify to get raw ratio
-    # Polysyllabic penalty: G4 dim 13 = polysyllabic word ratio (index 114, amp 2.0)
-    poly_signal = encoding[114] / G4_AMP
-    # Char entropy penalty: G4 dim 14 = character entropy (index 115, amp 2.0)
-    entropy_signal = encoding[115] / G4_AMP
-    # Rare word ratio: G4 dim 10 = rare_ratio (index 111, amp 2.0)
-    rare_signal = encoding[111] / G4_AMP
-    conf = max(0.0, conf - acad_signal * 0.3 - poly_signal * 0.2 - entropy_signal * 0.15 - rare_signal * 0.15)
+    # Weighted penalty from ALL G4 dims (indices 101-115, amp = G4_AMP)
+    # Each weight controls how much that scalar penalizes surface confidence
+    g4_penalty_weights = [
+        0.0,   # 0: token_count_norm — longer sentences aren't necessarily complex
+        -0.1,  # 1: TTR — high unique ratio = complex vocabulary
+        0.0,   # 2: mean_token_len
+        0.1,   # 3: dep_depth — subordination proxy
+        0.0,   # 4: mean_clause_len
+        0.0,   # 5: lexical_density
+        0.0,   # 6: bigram_diversity
+        0.0,   # 7: sentence_rhythm
+        0.0,   # 8: vocab_richness
+        0.0,   # 9: length_variation
+        0.15,  # 10: rare_ratio
+        0.1,   # 11: clause_proxy
+        0.3,   # 12: academic_ratio
+        0.2,   # 13: polysyllabic_ratio
+        0.15,  # 14: char_entropy
+    ]
+    penalty = 0.0
+    for i, w in enumerate(g4_penalty_weights):
+        if w != 0.0:
+            penalty += (encoding[101 + i] / G4_AMP) * w
+    conf = max(0.0, conf - max(0.0, penalty))
 
     return max(0.0, min(1.0, conf))
 
