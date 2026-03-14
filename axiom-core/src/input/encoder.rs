@@ -115,7 +115,8 @@ const G5_PREPOSITIONS: &[&str] = &[
 ///   39 buckets by `id % 39`, weighted by `1/(1+position)`. NOT normalised.
 /// - **Group 4** (dims 101–115): Complexity scalars — token count, TTR, mean length,
 ///   dependency depth, mean clause length, lexical density, bigram diversity, sentence rhythm,
-///   vocabulary richness, length variation, rare word ratio, clause count. 15 dims.
+///   vocabulary richness, length variation, rare word ratio, clause count, academic ratio,
+///   polysyllabic ratio, character entropy. 15 dims.
 /// - **Group 5** (dims 116–127): Structural syntax features — dependency depth proxy (4d),
 ///   constituent length variance (2d), function word position entropy (5d), 1 pad. 12 dims.
 ///
@@ -555,22 +556,77 @@ impl Encoder {
         let clause_proxy =
             ((comma_count + subord_count + semicolons) as f32 / MAX_DEP_DEPTH).min(1.0);
 
+        // Dim 12: Academic/Latin-Greek suffix ratio
+        let academic_suffixes: &[&str] = &[
+            "tion", "sion", "ment", "ness", "ical", "ious", "eous",
+            "ology", "istic", "ence", "ance", "ive", "ism", "ist",
+            "able", "ible", "ular", "uous", "ity", "phy", "thy",
+        ];
+        let acad_count = words
+            .iter()
+            .filter(|w| academic_suffixes.iter().any(|s| w.ends_with(s)))
+            .count();
+        let academic_ratio = acad_count as f32 / n as f32;
+
+        // Dim 13: Polysyllabic word ratio (4+ syllables)
+        let mut poly_count = 0usize;
+        for w in words {
+            let mut syl = 0u32;
+            let mut prev_v = false;
+            for ch in w.chars() {
+                let is_v = matches!(ch, 'a' | 'e' | 'i' | 'o' | 'u');
+                if is_v && !prev_v {
+                    syl += 1;
+                }
+                prev_v = is_v;
+            }
+            if syl >= 4 {
+                poly_count += 1;
+            }
+        }
+        let polysyllabic_ratio = poly_count as f32 / n as f32;
+
+        // Dim 14: Character entropy
+        let mut char_freq = [0u32; 128];
+        let mut total_chars = 0u32;
+        for w in words {
+            for ch in w.chars() {
+                let idx = (ch as u32) as usize;
+                if idx < 128 {
+                    char_freq[idx] += 1;
+                    total_chars += 1;
+                }
+            }
+        }
+        let char_entropy = if total_chars > 0 {
+            let mut entropy = 0.0f32;
+            for &count in &char_freq {
+                if count > 0 {
+                    let p = count as f32 / total_chars as f32;
+                    entropy -= p * p.ln();
+                }
+            }
+            (entropy / 3.26).min(1.0) // normalise by ln(26) ≈ 3.26
+        } else {
+            0.0
+        };
+
         [
-            token_count_norm, // 0
-            ttr,              // 1
-            mean_token_len,   // 2
-            dep_depth,        // 3
-            mean_clause_len,  // 4
-            lexical_density,  // 5
-            bigram_diversity, // 6
-            sentence_rhythm,  // 7
-            vocab_richness,   // 8
-            length_variation, // 9
-            rare_ratio,       // 10
-            clause_proxy,     // 11
-            0.0,              // 12 (pad)
-            0.0,              // 13 (pad)
-            0.0,              // 14 (pad)
+            token_count_norm,    // 0
+            ttr,                 // 1
+            mean_token_len,      // 2
+            dep_depth,           // 3
+            mean_clause_len,     // 4
+            lexical_density,     // 5
+            bigram_diversity,    // 6
+            sentence_rhythm,     // 7
+            vocab_richness,      // 8
+            length_variation,    // 9
+            rare_ratio,          // 10
+            clause_proxy,        // 11
+            academic_ratio,      // 12
+            polysyllabic_ratio,  // 13
+            char_entropy,        // 14
         ]
     }
 
@@ -806,12 +862,12 @@ impl Encoder {
     /// G1 (n-gram) and G2 (syntactic) are the strongest discriminating groups
     /// between simple and complex sentences — amplified by 3.0 to widen the
     /// directional separation in cosine space. G4 (complexity scalars) amplified
-    /// by 2.0. G5 (structural syntax) amplified by 3.0 to match structural
+    /// by 4.0. G5 (structural syntax) amplified by 3.0 to match structural
     /// groups. G3 (token signal) unchanged.
     const G1_AMP: f32 = 3.0;
     const G2_AMP: f32 = 3.0;
     const G3_AMP: f32 = 1.0;
-    const G4_AMP: f32 = 2.0;
+    const G4_AMP: f32 = 4.0;
     const G5_AMP: f32 = 3.0;
 
     /// Encode token IDs and raw text into a 128-dim structural tensor.
@@ -1251,7 +1307,7 @@ mod tests {
             );
         }
 
-        // G4 (dims 101..116) should be amplified by 2.0
+        // G4 (dims 101..116) should be amplified by 4.0
         let g4_base = NGRAM_DIMS + SYNTACTIC_DIMS + TOKEN_DIMS;
         for i in 0..SCALAR_DIMS {
             let expected = raw_scalars[i] * Encoder::G4_AMP;

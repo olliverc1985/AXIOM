@@ -124,6 +124,8 @@ pub trait ComputeNode: Send + Sync {
     fn set_g4_magnitude_penalty(&mut self, _params: Option<(usize, usize, f32, f32, f32)>) {}
     /// Set the confidence base weight (mix ratio between base_confidence and cosine_sim).
     fn set_confidence_base_weight(&mut self, _weight: f32) {}
+    /// Set per-dimension penalty weights for confidence reduction.
+    fn set_per_dim_penalty(&mut self, _penalties: Vec<(usize, f32, f32)>) {}
     /// Orthogonally initialise weights toward a specific basis direction.
     fn init_orthogonal(&mut self, _basis_vector: &[f32], _noise_scale: f32, _seed: u64) {}
     /// Return the node's mean weight direction vector (mean of weight columns).
@@ -331,6 +333,11 @@ pub struct LinearNode {
     /// Weight for base_confidence in the confidence mix (default 0.7).
     /// confidence = base_weight * base_confidence + (1 - base_weight) * cosine_sim
     pub confidence_base_weight: f32,
+    /// Per-dimension penalty weights for confidence reduction.
+    /// Each entry: (dim_index, weight, amp_factor).
+    /// penalty += (input[dim_index] / amp_factor) * weight
+    /// Negative weight = bonus (increases confidence).
+    per_dim_penalty: Vec<(usize, f32, f32)>,
 }
 
 
@@ -380,6 +387,7 @@ impl LinearNode {
             g5_bucketed_penalty: None,
             g4_magnitude_penalty: None,
             confidence_base_weight: 0.7,
+            per_dim_penalty: Vec::new(),
         }
     }
 
@@ -414,6 +422,7 @@ impl LinearNode {
             g5_bucketed_penalty: None,
             g4_magnitude_penalty: None,
             confidence_base_weight: 0.7,
+            per_dim_penalty: Vec::new(),
         }
     }
 
@@ -563,9 +572,9 @@ impl ComputeNode for LinearNode {
             if s < e {
                 // Estimate word count from G4 token_count_norm at dim 101.
                 // token_count_norm = word_count / MAX_SENTENCE_LEN (40) then
-                // amplified by G4_AMP (2.0), so word_count ≈ input[101] * 20.0.
+                // amplified by G4_AMP (4.0), so word_count ≈ input[101] * 10.0.
                 let word_count_est = if input_slice.len() > 101 {
-                    (input_slice[101] * 20.0).round() as usize
+                    (input_slice[101] * 10.0).round() as usize
                 } else {
                     6 // default to medium bucket
                 };
@@ -607,6 +616,17 @@ impl ComputeNode for LinearNode {
                     ((g4_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
                 confidence = (confidence - penalty * weight).clamp(0.0, 1.0);
             }
+        }
+
+        // Per-dimension penalty: weighted sum of specific feature dimensions.
+        if !self.per_dim_penalty.is_empty() {
+            let mut dim_penalty = 0.0f32;
+            for &(dim_idx, weight, amp) in &self.per_dim_penalty {
+                if dim_idx < input_slice.len() && amp.abs() > epsilon {
+                    dim_penalty += (input_slice[dim_idx] / amp) * weight;
+                }
+            }
+            confidence = (confidence - dim_penalty.max(0.0)).clamp(0.0, 1.0);
         }
 
         let compute_cost = (self.input_dim * self.output_dim) as f32 / 1000.0;
@@ -840,6 +860,10 @@ impl ComputeNode for LinearNode {
 
     fn set_confidence_base_weight(&mut self, weight: f32) {
         self.confidence_base_weight = weight;
+    }
+
+    fn set_per_dim_penalty(&mut self, penalties: Vec<(usize, f32, f32)>) {
+        self.per_dim_penalty = penalties;
     }
 
     fn init_orthogonal(&mut self, basis_vector: &[f32], noise_scale: f32, seed: u64) {

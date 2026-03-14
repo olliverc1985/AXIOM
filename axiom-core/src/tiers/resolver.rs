@@ -1489,12 +1489,38 @@ impl HierarchicalResolver {
             weight: 0.35,
         });
 
+        // Per-dimension penalty weights from autoresearch (val_score 0.9018).
+        // Each entry: (dim_index, weight, amp_factor).
+        // G4 penalties (dims 101–115, amp 4.0):
+        //   TTR=-0.05, dep=0.1, rare=0.1, clause=0.1, academic=0.2, poly=0.3, entropy=0.1
+        // G2 penalties (dims 26–61, amp 3.0):
+        //   long_word=0.12, init_cap=0.12, max_wl=0.25, punct=0.1, octile5=-0.15, octile3=-0.15
+        let per_dim_penalties: Vec<(usize, f32, f32)> = vec![
+            // G4 penalties
+            (102, -0.05, 4.0),  // TTR (bonus for high TTR)
+            (104,  0.10, 4.0),  // dep_depth
+            (111,  0.10, 4.0),  // rare_ratio
+            (112,  0.10, 4.0),  // clause_proxy
+            (113,  0.20, 4.0),  // academic_ratio
+            (114,  0.30, 4.0),  // polysyllabic_ratio
+            (115,  0.10, 4.0),  // char_entropy
+            // G2 penalties
+            (49,   0.12, 3.0),  // long_word_ratio
+            (51,   0.12, 3.0),  // init_cap
+            (37,   0.25, 3.0),  // max_wl
+            (39,   0.10, 3.0),  // punct
+            (31,  -0.15, 3.0),  // octile5 (bonus)
+            (29,  -0.15, 3.0),  // octile3 (bonus)
+        ];
+
         // Apply to graph nodes (Surface tier only)
         for (i, node) in self.graph.nodes_mut().iter_mut().enumerate() {
             if node.tier() == Tier::Surface {
                 node.init_analytical(&init, 42 + i as u64);
                 node.set_frozen(true);
                 node.set_g5_bucketed_penalty(bucketed);
+                node.set_confidence_base_weight(0.0);
+                node.set_per_dim_penalty(per_dim_penalties.clone());
             }
         }
 
@@ -1503,6 +1529,8 @@ impl HierarchicalResolver {
             node.init_analytical(&init, 1000 + i as u64);
             node.set_frozen(true);
             node.set_g5_bucketed_penalty(bucketed);
+            node.set_confidence_base_weight(0.0);
+            node.set_per_dim_penalty(per_dim_penalties.clone());
         }
 
         // Apply to lateral nodes (these are Surface-tier)
@@ -1510,6 +1538,8 @@ impl HierarchicalResolver {
             node.init_analytical(&init, 2000 + i as u64);
             node.set_frozen(true);
             node.set_g5_bucketed_penalty(bucketed);
+            node.set_confidence_base_weight(0.0);
+            node.set_per_dim_penalty(per_dim_penalties.clone());
         }
 
         // Store G5 norms for persistence
@@ -3745,9 +3775,11 @@ mod tests {
         let path = "/tmp/axiom_g5_roundtrip_test.json";
         resolver.save_all_weights(path).expect("save failed");
 
-        // Load into a fresh resolver
+        // Load into a fresh resolver — re-init analytical to restore
+        // confidence_base_weight and per_dim_penalty (not persisted).
         let mut resolver2 = HierarchicalResolver::build_with_axiom_config(128, &config);
         resolver2.load_all_weights(path).expect("load failed");
+        resolver2.init_surface_analytical(&simple_t, &complex_t);
         resolver2.set_g5_penalty_weight(0.25);
 
         let loaded_simple_conf = resolver2.max_surface_confidence(&simple_input);

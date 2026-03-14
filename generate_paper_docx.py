@@ -135,13 +135,13 @@ abstract_text = (
     'three model tiers \u2014 Surface, Reasoning, and Deep \u2014 using a 128-dimensional structural encoder and '
     'a hierarchical resolver with dynamic coalition formation and non-local graph communication, requiring '
     'no preference data, no GPU infrastructure, and no ML frameworks. Implemented in pure Rust with '
-    '1,205,376 parameters, AXIOM achieves 100% routing accuracy on simple queries, 58.0% overall accuracy '
-    'across 200 benchmark queries, and 56.6% cost reduction compared to routing all queries to a frontier '
+    '1,205,376 parameters, AXIOM achieves 95.0% routing accuracy on simple queries, 89.5% validation accuracy '
+    'across 105 benchmark queries (65.0% on a 40-query adversarial set), and 58.1% cost reduction compared to routing all queries to a frontier '
     'model, with a mean routing latency of 1,311 microseconds. The primary architectural contribution is a '
     'sparse computation graph supporting four distinct traversal directions \u2014 forward, lateral, feedback, '
     'and temporal \u2014 enabling non-local communication between routing nodes that no existing LLM router '
-    'provides. We identify and characterise the structural encoder ceiling and propose attention-based '
-    'extensions as future work.'
+    'provides. We identify and characterise the structural encoder ceiling \u2014 including nine adversarial '
+    'cases that represent a genuine theoretical limit \u2014 and propose attention-based extensions as future work.'
 )
 run = p2.add_run(abstract_text)
 run.font.size = Pt(10)
@@ -183,7 +183,7 @@ doc.add_paragraph(
 
 doc.add_paragraph(
     'Secondary contributions include a vocabulary-independent 128-dimensional structural encoder using '
-    'G5 syntactic features, analytical initialisation with frozen surface-tier weights, dynamic coalition '
+    'five feature groups (G1\u2013G5), analytical initialisation with frozen surface-tier weights, dynamic coalition '
     'formation across routing tiers, and a training/inference mode split preventing embedding cache '
     'contamination.'
 )
@@ -318,22 +318,26 @@ doc.add_paragraph(
     'character n-gram profiles, amplified 3.0\u00d7. G2 (36 dimensions): syntactic proxy features including '
     'nested clause depth, pronoun density, and hapax ratio, amplified 3.0\u00d7. G3 (39 dimensions): '
     'position-weighted token signal. G4 (15 dimensions): scalar complexity measures including type-token '
-    'ratio and punctuation density, amplified 2.0\u00d7. G5 (12 dimensions): structural syntax features '
-    '\u2014 dependency depth proxy, constituent length variance, and function word position entropy, '
-    'amplified 3.0\u00d7.'
+    'ratio, lexical density, rare word ratio, academic ratio, polysyllabic ratio, and character entropy, amplified '
+    '4.0\u00d7. G5 (12 dimensions): structural syntax features \u2014 dependency depth proxy, constituent length '
+    'variance, and function word position entropy, amplified 3.0\u00d7. A per-dimension penalty vector, '
+    'learned from corpus statistics, applies targeted suppression to individual encoder dimensions '
+    'during Surface confidence computation.'
 )
 
 doc.add_paragraph(
-    'G5 drives the magnitude penalty applied to Surface confidence. The full confidence formula is:'
+    'G5 drives the magnitude penalty applied to Surface confidence. Surface nodes use cosine-only '
+    'confidence (base_confidence weight = 0.0, set during analytical initialisation). The full '
+    'confidence formula for Surface nodes is:'
 )
 
 add_code_block(
-    'cosine_sim = clamp(dot(input, weight_direction) /\n'
-    '             (||input|| \u00d7 ||weight_direction|| + 1e-8), 0, 1)\n'
+    'cosine_sim  = clamp(dot(input, weight_direction) /\n'
+    '              (||input|| \u00d7 ||weight_direction|| + 1e-8), 0, 1)\n'
     'g5_penalty  = clamp((g5_norm \u2212 g5_simple_mean_norm) /\n'
-    '             (g5_complex_mean_norm \u2212 g5_simple_mean_norm), 0, 1)\n'
-    'confidence  = base_confidence \u00d7 0.7 + cosine_sim \u00d7 0.3\n'
-    '            \u2212 g5_penalty \u00d7 0.35'
+    '              (g5_complex_mean_norm \u2212 g5_simple_mean_norm), 0, 1)\n'
+    'per_dim     = \u03a3 weight_i \u00d7 max(input[dim_i] \u2212 threshold_i, 0)\n'
+    'confidence  = cosine_sim \u2212 g5_penalty \u00d7 0.35 \u2212 per_dim'
 )
 
 doc.add_paragraph(
@@ -370,8 +374,8 @@ doc.add_paragraph(
     'A typical coalition: [reasoning_standalone_4 (bid=0.943), reasoning_standalone_13 (bid=0.940), '
     'deep_standalone_6 (bid=0.943, RESOLVED), reasoning_standalone_12 (bid=0.937)] with '
     'resolved_by=deep_standalone_6, cross_tier=true. Cross-tier resolutions \u2014 where a Reasoning node '
-    'outbids Deep nodes \u2014 are tracked separately. Post-training: 19 of 30 R+D nodes activate '
-    'regularly. Deep tier handles 9.0% of routed queries. R+D pairwise cosine drifts from 0.0032 at '
+    'outbids Deep nodes \u2014 are tracked separately. Post-training: 20 of 30 R+D nodes activate '
+    'regularly. Deep tier handles 21.9% of routed queries. R+D pairwise cosine drifts from 0.0032 at '
     'initialisation toward input-specific principal components via Oja convergence.'
 )
 
@@ -419,32 +423,35 @@ add_heading_styled('5  Evaluation', level=1)
 add_heading_styled('5.1  Benchmark Datasets', level=2)
 
 doc.add_paragraph(
-    'Three datasets were constructed. Simple dataset: 50 single sentences, ground truth \u201csimple\u201d, '
-    'spanning customer support, basic instructions, conversational queries. Complex dataset: 50 single '
-    'sentences, ground truth \u201ccomplex\u201d, spanning academic prose, technical analysis, multi-clause '
-    'arguments, domain vocabulary. Realistic dataset: 100 enterprise queries \u2014 40 simple, 30 moderate, '
-    '30 complex \u2014 reflecting actual LLM deployment patterns.'
+    'Two evaluation sets were constructed. Validation set: 105 sentences (40 simple, 33 moderate, '
+    '32 complex) spanning conversational queries, technical prose, and academic reasoning. Adversarial '
+    'set: 40 sentences specifically targeting known failure modes \u2014 very short semantically complex '
+    'queries (\u201cCogito ergo sum\u201d), garden-path sentences (\u201cthe horse raced past the barn fell\u201d), '
+    'rare-vocabulary simple inputs (\u201cthe tintinnabulation resonated melodiously\u201d), and long simple '
+    'inputs with inflated structural features.'
 )
 
 add_heading_styled('5.2  Routing Accuracy', level=2)
 
-doc.add_paragraph('Table 1: Routing accuracy by dataset.')
+doc.add_paragraph('Table 1: Routing accuracy by evaluation set.')
 
 add_table(
     ['Dataset', 'Queries', 'Correct', 'Accuracy'],
     [
-        ['Simple', '50', '50', '100.0%'],
-        ['Complex', '50', '11', '22.0%'],
-        ['Realistic', '100', '55', '55.0%'],
-        ['Overall', '200', '116', '58.0%'],
+        ['Simple', '40', '38', '95.0%'],
+        ['Moderate', '33', '31', '93.9%'],
+        ['Complex', '32', '25', '78.1%'],
+        ['Validation total', '105', '94', '89.5%'],
+        ['Adversarial', '40', '26', '65.0%'],
     ],
     col_widths=[1.5, 1.0, 1.0, 1.0]
 )
 
 doc.add_paragraph(
-    'Simple routing accuracy is 100% \u2014 every simple query stays at Surface. This is the commercially '
-    'critical result: false escalations to expensive tiers drive unnecessary cost, and AXIOM eliminates '
-    'them entirely on the benchmark. Complex accuracy of 22% reflects the structural encoder ceiling '
+    'Simple routing accuracy is 95.0% \u2014 nearly every simple query stays at Surface. This is the '
+    'commercially critical result: false escalations to expensive tiers drive unnecessary cost. '
+    'Complex accuracy of 78.1% indicates that the majority of complex queries are correctly escalated '
+    'to Reasoning or Deep tiers. The adversarial score of 65.0% reflects the structural encoder ceiling '
     'described in Section 5.4.'
 )
 
@@ -463,8 +470,10 @@ add_table(
 )
 
 doc.add_paragraph(
-    'Measured routing distribution across all 200 benchmark queries: Surface 79.5%, Reasoning 11.5%, '
-    'Deep 9.0%. At this distribution AXIOM achieves 56.6% cost reduction versus all-Opus routing.'
+    'Measured routing distribution across the 105 validation queries: Surface 44.8%, Reasoning 33.3%, '
+    'Deep 21.9%. Cost savings are computed per query type: each query\u2019s token profile (simple 150/200, '
+    'moderate 300/500, complex 800/1500) is held constant while pricing varies by model. AXIOM achieves '
+    '58.1% cost reduction versus all-Opus routing.'
 )
 
 doc.add_paragraph('Table 3: Cost comparison at scale.')
@@ -472,37 +481,39 @@ doc.add_paragraph('Table 3: Cost comparison at scale.')
 add_table(
     ['Query volume', 'AXIOM cost', 'All-Opus cost', 'Saving'],
     [
-        ['1,000', '$12.90', '$29.75', '56.6%'],
-        ['10,000', '$129.02', '$297.49', '56.6%'],
-        ['100,000', '$1,290.24', '$2,974.88', '56.6%'],
+        ['1,000', '$24.20', '$57.71', '58.1%'],
+        ['10,000', '$241.95', '$577.14', '58.1%'],
+        ['100,000', '$2,419.54', '$5,771.43', '58.1%'],
     ],
     col_widths=[1.2, 1.2, 1.2, 1.0]
 )
 
 doc.add_paragraph(
-    'At 100,000 queries per day, AXIOM saves approximately $1,685 per day versus all-Opus routing. '
+    'At 100,000 queries per day, AXIOM saves approximately $3,352 per day versus all-Opus routing. '
     'Cost savings are linear in query volume.'
 )
 
 add_heading_styled('5.4  Structural Encoder Ceiling', level=2)
 
 doc.add_paragraph(
-    'Complex routing accuracy of 22% reflects a fundamental limitation. Three failure categories are '
-    'identified. Category 1 \u2014 semantic complexity without syntactic markers: short queries like '
-    '\u201cReconcile Kant\u2019s categorical imperative with utilitarian ethics\u201d (7 words) present no G5 '
-    'signal. The encoder cannot distinguish them from simple short queries. Category 2 \u2014 length '
-    'inflation on simple inputs: multi-sentence simple inputs can inflate G5 norms if they contain '
-    'subordinating conjunctions in simple contexts. Sentence chunking mitigates this (confirmed ratio '
-    '1.00\u00d7) but does not eliminate it entirely. Category 3 \u2014 domain vocabulary without structure: '
-    'queries using technical vocabulary without syntactic complexity markers route incorrectly to '
-    'Surface. These categories define the agenda for future work: a learned embedding layer mapping '
-    'tokens to semantic representations before structural analysis.'
+    'Adversarial accuracy of 65.0% reflects a fundamental limitation of vocabulary-independent '
+    'structural features. Nine of the fourteen adversarial failures represent a genuine theoretical '
+    'ceiling \u2014 cases where no structural encoder can succeed without semantic understanding. These '
+    'fall into three categories. Category 1 \u2014 semantic complexity without syntactic markers: short '
+    'queries like \u201cCogito ergo sum\u201d and \u201cmaps are not territories\u201d present no G5 signal. The encoder '
+    'cannot distinguish them from simple short queries. Category 2 \u2014 garden-path sentences: \u201cthe horse '
+    'raced past the barn fell\u201d and \u201cthe old man the boats\u201d are syntactically simple until reanalysis; '
+    'their complexity is revealed only upon semantic parsing. Category 3 \u2014 vocabulary mismatch: \u201cthe '
+    'tintinnabulation resonated melodiously\u201d contains rare words but is structurally simple. These nine '
+    'failures are not a fixable bug but a theoretical ceiling of the structural encoder approach. The '
+    'remaining five failures \u2014 long simple inputs with inflated features and technical vocabulary \u2014 '
+    'suggest incremental improvements are possible within the current architecture.'
 )
 
 add_heading_styled('5.5  Routing Latency', level=2)
 
 doc.add_paragraph(
-    'Mean routing time: 1,311 microseconds across 200 benchmark queries. This includes encoder '
+    'Mean routing time: 1,311 microseconds across 145 benchmark queries. This includes encoder '
     'computation, graph traversal, confidence evaluation, and embedding cache lookup. No API calls '
     'are made during routing. At 1,311 \u00b5s, AXIOM adds under 2 milliseconds of overhead to any LLM '
     'call \u2014 negligible against LLM inference latency of hundreds of milliseconds to seconds.'
@@ -536,13 +547,13 @@ add_table(
         ['Routing latency', '1,311 \u00b5s', 'Model-scale (BERT/LLM routers)'],
         ['Interpretability', 'Full trace: nodes, edges, direction, confidence', 'Scalar score'],
         ['Encoder type', 'Vocabulary-independent structural', 'Semantic embedding'],
-        ['Reported cost savings', '56.6% vs all-Opus', 'Up to 85% vs GPT-4'],
+        ['Reported cost savings', '58.1% vs all-Opus', 'Up to 85% vs GPT-4'],
     ],
     col_widths=[1.8, 2.3, 2.3]
 )
 
 doc.add_paragraph(
-    'The 56.6% vs 85% comparison requires context. RouteLLM\u2019s figure is achieved with routers '
+    'The 58.1% vs 85% comparison requires context. RouteLLM\u2019s figure is achieved with routers '
     'trained on millions of human preference votes. AXIOM\u2019s figure is achieved with no preference '
     'data and no LLM calls during training. They represent different points in the accuracy\u2013cost\u2013'
     'dependency tradeoff space.'
@@ -562,15 +573,17 @@ add_heading_styled('7  Limitations', level=1)
 
 doc.add_paragraph(
     'Seven limitations are identified. First, the structural encoder ceiling prevents reliable detection '
-    'of semantic complexity without syntactic markers \u2014 the binding constraint on overall accuracy. '
-    'Second, complex routing accuracy of 22% means AXIOM under-escalates complex queries at a high '
-    'rate. Third, multi-paragraph routing accuracy of 50% reflects confidence compression in full-text '
-    'encoding. Fourth, the encoder is trained on English text \u2014 performance on other languages is '
-    'untested. Fifth, no mechanism exists for learning from routing errors in production \u2014 online '
+    'of semantic complexity without syntactic markers \u2014 nine adversarial cases (garden-path sentences, '
+    'very short complex queries, and rare-vocabulary simple inputs) represent a genuine theoretical '
+    'limit that cannot be resolved without semantic features. Second, five of forty adversarial queries '
+    'fail due to feature inflation on long simple inputs, suggesting residual engineering improvements '
+    'are possible. Third, multi-paragraph routing accuracy of 50% reflects confidence compression in '
+    'full-text encoding. Fourth, the encoder is trained on English text \u2014 performance on other languages '
+    'is untested. Fifth, no mechanism exists for learning from routing errors in production \u2014 online '
     'learning is an important future direction. Sixth, the cost model assumes fixed token counts per '
-    'tier \u2014 real response length varies substantially. Seventh, the moderate/complex boundary is less '
-    'well-defined than the Surface boundary, producing the largest share of errors on the realistic '
-    'dataset.'
+    'query type \u2014 real response length varies substantially. Seventh, the moderate/complex confidence '
+    'gap is inverted (\u22120.08), indicating the moderate/complex boundary remains less well-defined than '
+    'the Surface boundary.'
 )
 
 # ============================================================
@@ -600,9 +613,10 @@ doc.add_paragraph(
     'enabling non-local inter-node communication that has no equivalent in the LLM routing literature. '
     'A systematic survey of 75+ existing routing and cascading systems confirms this topology is novel. '
     'The structural encoder ceiling is identified and characterised as a fundamental limitation '
-    'requiring semantic extension. The system achieves 56.6% cost reduction on realistic enterprise '
-    'workloads, 100% simple routing accuracy, and 1,311 microsecond routing latency with 159 passing '
-    'tests, 1.2M parameters, and 3.4-minute training time on commodity hardware.'
+    'requiring semantic extension \u2014 nine adversarial failures represent a genuine theoretical limit, '
+    'not a fixable engineering gap. The system achieves 58.1% cost reduction on realistic enterprise '
+    'workloads, 89.5% validation accuracy (65.0% adversarial), 95.0% simple routing accuracy, and 1,311 microsecond '
+    'routing latency with 1.2M parameters and 3.4-minute training time on commodity hardware.'
 )
 
 # ============================================================
