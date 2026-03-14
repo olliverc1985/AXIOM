@@ -4,7 +4,7 @@
 
 A sparse dynamic routing architecture for cost-efficient LLM inference.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19007918.svg)](https://doi.org/10.5281/zenodo.19007918)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19016401.svg)](https://doi.org/10.5281/zenodo.19016401)
 
 AXIOM routes incoming queries across three model tiers — Surface, Reasoning, and Deep — using a 128-dimensional structural encoder and a hierarchical resolver with dynamic coalition formation and non-local graph communication. No preference data, no GPU, no ML frameworks. Pure Rust.
 
@@ -56,7 +56,7 @@ axiom-datasets/ Corpus data (simple/moderate/complex sentences)
 
 ## Paper
 
-The full paper is available as [`axiom_paper.docx`](axiom_paper.docx) and on [Zenodo](https://doi.org/10.5281/zenodo.19007918).
+The full paper is available as [`axiom_paper.docx`](axiom_paper.docx) and on [Zenodo](https://doi.org/10.5281/zenodo.19016401).
 
 ## License
 
