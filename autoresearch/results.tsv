@@ -1,0 +1,20 @@
+commit	val_score	simple_acc	complex_acc	status	description
+e2278c5	0.440051	0.6786	0.5893	baseline	original encoder port
+b1c16ef	0.448980	0.6786	0.6071	keep	G4 pad: academic suffix, polysyllabic, char entropy
+f0709bf	0.587809	0.7857	0.6786	keep	cosine-only confidence
+ccfb615	0.649302	0.8571	0.6607	keep	G5 penalty 0.20
+c2fe618	0.705290	0.9107	0.6607	keep	G5 penalty 0.10
+735168c	0.713816	0.8750	0.7321	keep	G5 penalty 0.05
+a702192	0.716971	0.8571	0.7679	keep	no G5 penalty
+c174ee1	0.745166	0.8929	0.7500	keep	academic suffix penalty 0.3
+335d266	0.785446	0.9286	0.7500	keep	academic 0.3 + polysyllabic 0.2
+5482e20	0.793434	0.9464	0.7321	keep	acad 0.3 + poly 0.2 + entropy 0.1
+d7cf3cd	0.805887	0.9464	0.7500	keep	entropy penalty 0.15
+a5901ce	0.818340	0.9464	0.7679	keep	+rare word penalty 0.15
+d2bfcb9	0.826786	0.9643	0.7679	keep	G4_AMP=4.0
+f9abd1f	0.830794	0.9464	0.7857	keep	full G4 penalty vector
+5689445	0.839286	0.9643	0.7857	keep	+G2 long word ratio 0.15
+3e7abd4	0.851786	0.9643	0.8036	keep	grid-searched optimal weights: poly 0.3, lw 0.2, reduced TTR/rare/acad/ent
+0282e51	0.876786	0.9643	0.8393	keep	init_cap penalty 0.15
+5385872	0.889286	0.9643	0.8571	keep	+G2 max_wl 0.2, punct 0.15, octile5 -0.15, lw 0.18
+0ff1802	0.901786	0.9643	0.8750	keep	refined G2: octile3 -0.15, max_wl 0.25, punct 0.1, lw 0.12, ic 0.12
