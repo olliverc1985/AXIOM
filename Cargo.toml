@@ -1,3 +1,17 @@
-[workspace]
-members = ["axiom-core", "axiom-bench", "axiom-tuner", "axiom-inference", "axiom-llm"]
-resolver = "2"
+[package]
+name = "axiom"
+version = "0.1.0"
+edition = "2021"
+description = "Adaptive eXecution with Intelligent Operations Memory - Sparse routing for cost-efficient LLM inference"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bin]]
+name = "axiom"
+path = "src/main.rs"
+
+[lib]
+name = "axiom"
+path = "src/lib.rs"
