@@ -1,5 +1,7 @@
 target/
 *.json
 *.log
+.env
+.env.*
 __pycache__/
 !Cargo.lock
