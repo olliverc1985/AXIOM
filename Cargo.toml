@@ -2,16 +2,22 @@
 name = "axiom"
 version = "0.1.0"
 edition = "2021"
-description = "Adaptive eXecution with Intelligent Operations Memory - Sparse routing for cost-efficient LLM inference"
+description = "AXIOM — Adaptive eXecution with Intelligent Operations Memory. Sparse routing for cost-efficient LLM inference."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-[[bin]]
-name = "axiom"
-path = "src/main.rs"
+uuid = { version = "1", features = ["v4"] }
+indicatif = "0.17"
 
 [lib]
 name = "axiom"
 path = "src/lib.rs"
+
+[[bin]]
+name = "axiom-bench"
+path = "src/bin/bench.rs"
+
+[[bin]]
+name = "axiom-tuner"
+path = "src/bin/tuner.rs"

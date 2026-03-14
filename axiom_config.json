@@ -1,17 +1,9 @@
 {
-  "mid_dim": 128,
-  "surface_node_count": 5,
-  "reasoning_node_count": 15,
-  "deep_node_count": 15,
-  "bid_threshold": 0.1,
-  "max_coalition_size": 4,
-  "temporal_buffer_capacity": 16,
-  "cache_similarity_threshold": 0.92,
-  "temporal_similarity_threshold": 0.85,
-  "temporal_blend_live": 0.7,
-  "temporal_blend_past": 0.3,
-  "chunk_escalation_threshold": 0.4,
-  "surface_escalation_threshold": 0.5,
-  "simple_mean_confidence": 0.0,
-  "complex_mean_confidence": 0.0
+  "surface_confidence_threshold": 0.85,
+  "reasoning_confidence_threshold": 0.7,
+  "reasoning_base_confidence": 0.74,
+  "cache_similarity_threshold": 0.91,
+  "g5_simple_mean_norm": 0.0,
+  "g5_complex_mean_norm": 0.0,
+  "rationale": "Deep 30.7% > 25% → raised reasoning_base_confidence to 0.74; Cache 0.0% < 25% → lowered cache threshold to 0.91; Surface 22.7% <= 70% → no change"
 }
