@@ -3,3 +3,6 @@ target/
 .env
 .env.*
 __pycache__/
+axiom_*.json
+!axiom_config.json
+!axiom_weights.json

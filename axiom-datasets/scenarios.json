@@ -1,0 +1,38 @@
+[
+  {
+    "id": "scenario_01",
+    "label": "simple",
+    "notes": "Three paragraphs, common vocabulary, clear intent, no technical content. Tests chunking on simple multi-paragraph input. Should route Surface.",
+    "text": "Hi there, I hope you are having a good week. I wanted to get in touch about my recent order that I placed last Tuesday. I have not received any shipping confirmation yet and was wondering if everything is okay with my order. The order number is 84729 and I ordered two blue t-shirts in size medium and one pair of black jeans in size 32. I paid with my Visa card and the payment went through fine according to my bank. Could you please let me know when my order will be shipped and provide a tracking number when available? I am not in a rush but would appreciate an update when you get a chance. Thank you very much for your help."
+  },
+  {
+    "id": "scenario_02",
+    "label": "complex",
+    "notes": "Seven words, structurally simple, semantically deep. Classic failure mode for structural encoding. Expected to incorrectly route Surface because there are no structural complexity markers. Honest failure case for the paper.",
+    "text": "Reconcile Kant's categorical imperative with utilitarian ethics."
+  },
+  {
+    "id": "scenario_03",
+    "label": "moderate",
+    "notes": "Two paragraphs, technical but accessible, some subordination, moderate vocabulary. Should route Reasoning. Tests whether moderate complexity is handled correctly or over-escalates to Deep.",
+    "text": "I am trying to understand how database indexing works and when I should use it in my application. I have read that indexes speed up queries but also slow down writes, and I am not sure how to decide when the tradeoff is worth it. My application has a users table with about 500,000 rows and I am running queries that filter by email address and by signup date. The queries are currently taking around 800 milliseconds which feels slow. Could you explain the key concepts I need to understand and give me a practical recommendation for this situation?"
+  },
+  {
+    "id": "scenario_04",
+    "label": "complex",
+    "notes": "Dense academic prose, multiple embedded clauses, abstract philosophical vocabulary across three paragraphs. Should route Deep. Tests whether sustained complexity across paragraphs is correctly identified.",
+    "text": "The relationship between consciousness and physical substrate has occupied philosophers and scientists for centuries, yet contemporary neuroscience has done little to resolve the fundamental tension between first-person phenomenal experience and third-person objective description. The hard problem, as Chalmers formulated it, asks not merely how the brain processes information but why such processing is accompanied by subjective experience at all. Functionalist accounts that identify mental states with computational roles face the challenge of explaining why any physical system implementing the right functional organisation should give rise to qualia rather than proceeding as a philosophical zombie, behaviourally indistinguishable from a conscious being yet entirely lacking inner experience. The multiple realisability argument further complicates matters by suggesting that consciousness is substrate-independent, which sits uneasily with neuroscientific evidence for specific neural correlates of conscious states. Perhaps the most promising avenue lies in integrated information theory, which attempts to provide a mathematical framework for consciousness grounded in the intrinsic causal structure of physical systems. Yet even this approach faces serious objections regarding its counterintuitive implications for the distribution of consciousness across simple physical systems and its difficulty in making empirically falsifiable predictions about the boundaries of conscious experience."
+  },
+  {
+    "id": "scenario_05",
+    "label": "simple",
+    "notes": "One paragraph of context followed by a simple question. The context adds length and some structure but the actual request is simple. Tests whether contextual framing incorrectly escalates a simple query.",
+    "text": "I have been a customer for three years and generally really enjoy your service. Last month I upgraded my account to the premium tier and everything has been working well. I just have one quick question. How do I add a second user to my account?"
+  },
+  {
+    "id": "scenario_06",
+    "label": "moderate",
+    "notes": "Mixed natural language and code tokens. Novel encoder challenge — code has very different structural patterns than prose. A developer asking for help understanding existing code. Should route Reasoning.",
+    "text": "I have inherited a codebase and I am trying to understand what this function does. Can you explain it to me and suggest any improvements? def calculate_score(users, threshold=0.75): results = [] for user in users: if user.get(active) and user.get(score, 0) >= threshold: results.append({id: user[id], score: user[score], rank: len(results) + 1}) return sorted(results, key=lambda x: x[score], reverse=True)"
+  }
+]
