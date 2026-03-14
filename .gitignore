@@ -1,1 +1,5 @@
-/target
+target/
+*.log
+.env
+.env.*
+__pycache__/
