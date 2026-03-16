@@ -1,8 +1,16 @@
 [package]
 name = "axiom"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-description = "AXIOM — Adaptive eXecution with Intelligent Operations Memory. Sparse routing for cost-efficient LLM inference."
+description = "AXIOM — Adaptive eXecution with Intelligent Operations Memory. Sparse dynamic routing for cost-efficient LLM inference."
+license = "MIT"
+repository = "https://github.com/olliverc1985/AXIOM"
+keywords = ["llm", "routing", "sparse-computation", "machine-learning", "inference"]
+categories = ["science", "algorithms"]
+
+[features]
+default = []
+gpu = ["metal"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -10,14 +18,25 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 indicatif = "0.17"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = { version = "0.29", optional = true }
+
 [lib]
 name = "axiom"
 path = "src/lib.rs"
+
+[[bin]]
+name = "train_axiom"
+path = "src/bin/train_axiom.rs"
+
+[[bin]]
+name = "eval_axiom"
+path = "src/bin/eval_axiom.rs"
 
 [[bin]]
 name = "axiom-bench"
 path = "src/bin/bench.rs"
 
 [[bin]]
-name = "axiom-tuner"
-path = "src/bin/tuner.rs"
+name = "routerbench_eval"
+path = "src/bin/routerbench_eval.rs"
