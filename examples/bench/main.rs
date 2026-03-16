@@ -9,12 +9,10 @@
 //! Phase 13: coalition_bid_threshold=0.10, max_coalition_size=4.
 //!
 //! Usage:
-//!   cargo run --release -p axiom-bench              # terminal only
-//!   cargo run --release -p axiom-bench -- --dashboard  # terminal + HTML dashboard on :8080
+//!   cargo run --release --example axiom-bench              # terminal only
+//!   cargo run --release --example axiom-bench -- --dashboard  # terminal + HTML dashboard on :8080
 
-#[path = "../bench/corpus.rs"]
 mod corpus;
-#[path = "../bench/dashboard.rs"]
 mod dashboard;
 
 use axiom::graph::TraversalDirection;
