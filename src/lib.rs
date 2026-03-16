@@ -1,12 +1,22 @@
 //! AXIOM Core — Adaptive eXecution with Intelligent Operations Memory
 //!
-//! A sparse, self-routing, memory-persistent AI architecture built from scratch.
-//! No transformer or CNN assumptions — three novel primitives working together:
-//! sparse computation graph, persistent embedding cache, and hierarchical reasoning tiers.
+//! Sparse dynamic routing architecture for cost-efficient LLM inference.
+//! Dual-encoder (structural + semantic) always-fuse design with 3-tier classification.
+//! Built from scratch in pure Rust — no external ML framework dependencies.
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::manual_memcpy)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::field_reassign_with_default)]
 
 pub mod cache;
+pub mod gpu;
 pub mod graph;
 pub mod input;
+pub mod router;
+pub mod semantic;
 pub mod tiers;
 pub mod tuner;
 
@@ -176,8 +186,16 @@ impl Tensor {
         let len = self.data.len().max(other.data.len());
         let mut data = Vec::with_capacity(len);
         for i in 0..len {
-            let a = if i < self.data.len() { self.data[i] } else { 0.0 };
-            let b = if i < other.data.len() { other.data[i] } else { 0.0 };
+            let a = if i < self.data.len() {
+                self.data[i]
+            } else {
+                0.0
+            };
+            let b = if i < other.data.len() {
+                other.data[i]
+            } else {
+                0.0
+            };
             data.push(a * alpha + b * (1.0 - alpha));
         }
         Tensor {

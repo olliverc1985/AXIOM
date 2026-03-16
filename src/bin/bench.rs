@@ -255,9 +255,7 @@ fn test_sentences() -> Vec<(&'static str, &'static str)> {
 }
 
 /// Count traversal direction steps from a resolve result.
-fn count_directions(
-    trace_steps: &[axiom::graph::TraceStep],
-) -> (usize, usize, usize, usize) {
+fn count_directions(trace_steps: &[axiom::graph::TraceStep]) -> (usize, usize, usize, usize) {
     let mut forward = 0;
     let mut lateral = 0;
     let mut feedback = 0;
@@ -485,7 +483,12 @@ fn print_text_results(label: &str, result: &TextPassResult, n_sentences: usize) 
     println!();
     print_complexity_breakdown(&result.complexity_tiers);
     println!();
-    print_direction_summary(result.forward, result.lateral, result.feedback, result.temporal);
+    print_direction_summary(
+        result.forward,
+        result.lateral,
+        result.feedback,
+        result.temporal,
+    );
     println!(
         "  Lateral: {} attempted, {} prevented escalation",
         result.lateral_count, result.lateral_prevented
@@ -526,33 +529,56 @@ fn main() {
 
     // Load corpus
     let mut corpus = Corpus::load();
-    println!("  Corpus: {} simple, {} moderate, {} complex = {} total",
-        corpus.simple.len(), corpus.moderate.len(), corpus.complex.len(),
-        corpus.simple.len() + corpus.moderate.len() + corpus.complex.len());
+    println!(
+        "  Corpus: {} simple, {} moderate, {} complex = {} total",
+        corpus.simple.len(),
+        corpus.moderate.len(),
+        corpus.complex.len(),
+        corpus.simple.len() + corpus.moderate.len() + corpus.complex.len()
+    );
 
     // Load multi-paragraph corpus if available
     let mp_path = "axiom-datasets/multi_paragraph_corpus.json";
     if std::path::Path::new(mp_path).exists() {
         #[derive(Deserialize)]
-        struct MpEntry { text: String, label: String }
+        struct MpEntry {
+            text: String,
+            label: String,
+        }
         let mp_data: Vec<MpEntry> = serde_json::from_str(
-            &std::fs::read_to_string(mp_path).expect("failed to read multi-paragraph corpus")
-        ).expect("failed to parse multi-paragraph corpus");
+            &std::fs::read_to_string(mp_path).expect("failed to read multi-paragraph corpus"),
+        )
+        .expect("failed to parse multi-paragraph corpus");
         let (mut mp_s, mut mp_m, mut mp_c) = (0usize, 0usize, 0usize);
         for entry in &mp_data {
             match entry.label.as_str() {
-                "simple" => { corpus.simple.push(entry.text.clone()); mp_s += 1; }
-                "moderate" => { corpus.moderate.push(entry.text.clone()); mp_m += 1; }
-                "complex" => { corpus.complex.push(entry.text.clone()); mp_c += 1; }
+                "simple" => {
+                    corpus.simple.push(entry.text.clone());
+                    mp_s += 1;
+                }
+                "moderate" => {
+                    corpus.moderate.push(entry.text.clone());
+                    mp_m += 1;
+                }
+                "complex" => {
+                    corpus.complex.push(entry.text.clone());
+                    mp_c += 1;
+                }
                 _ => {}
             }
         }
-        println!("  Multi-paragraph: +{} simple, +{} moderate, +{} complex from {}",
-            mp_s, mp_m, mp_c, mp_path);
+        println!(
+            "  Multi-paragraph: +{} simple, +{} moderate, +{} complex from {}",
+            mp_s, mp_m, mp_c, mp_path
+        );
     }
-    println!("  Total corpus: {} simple, {} moderate, {} complex = {} total",
-        corpus.simple.len(), corpus.moderate.len(), corpus.complex.len(),
-        corpus.simple.len() + corpus.moderate.len() + corpus.complex.len());
+    println!(
+        "  Total corpus: {} simple, {} moderate, {} complex = {} total",
+        corpus.simple.len(),
+        corpus.moderate.len(),
+        corpus.complex.len(),
+        corpus.simple.len() + corpus.moderate.len() + corpus.complex.len()
+    );
 
     // Corpus statistics
     let mean_words = |v: &[String]| -> f64 {
@@ -561,16 +587,22 @@ fn main() {
     };
     // Need to collect owned strings first for lifetime
     let all_sentences = corpus.all();
-    let vocab_set: std::collections::HashSet<&str> = all_sentences.iter()
+    let vocab_set: std::collections::HashSet<&str> = all_sentences
+        .iter()
         .flat_map(|(s, _)| s.split_whitespace().collect::<Vec<&str>>())
         .collect();
     let simple_mean_wc = mean_words(&corpus.simple);
     let moderate_mean_wc = mean_words(&corpus.moderate);
     let complex_mean_wc = mean_words(&corpus.complex);
-    println!("  Mean word count: simple={:.1}, moderate={:.1}, complex={:.1}",
-        simple_mean_wc, moderate_mean_wc, complex_mean_wc);
+    println!(
+        "  Mean word count: simple={:.1}, moderate={:.1}, complex={:.1}",
+        simple_mean_wc, moderate_mean_wc, complex_mean_wc
+    );
     println!("  Vocabulary size: {} unique words", vocab_set.len());
-    assert!(simple_mean_wc < complex_mean_wc, "simple mean word count must be lower than complex");
+    assert!(
+        simple_mean_wc < complex_mean_wc,
+        "simple mean word count must be lower than complex"
+    );
     println!();
 
     // Load or default config
@@ -593,16 +625,25 @@ fn main() {
         println!("    rationale: {}", config.rationale);
     }
     println!();
-    println!("  Config: dim={}, train_iterations={}, lr={}, error_lr={}",
-        input_dim, train_iterations, learning_rate, error_lr);
-    println!("  Overrides: g5_w={}, g4_w={}, contrastive_lr={}, conf_mix={:.1}/{:.1}",
-        g5_weight, g4_weight, contrastive_lr_override,
-        confidence_base_weight, 1.0 - confidence_base_weight);
+    println!(
+        "  Config: dim={}, train_iterations={}, lr={}, error_lr={}",
+        input_dim, train_iterations, learning_rate, error_lr
+    );
+    println!(
+        "  Overrides: g5_w={}, g4_w={}, contrastive_lr={}, conf_mix={:.1}/{:.1}",
+        g5_weight,
+        g4_weight,
+        contrastive_lr_override,
+        confidence_base_weight,
+        1.0 - confidence_base_weight
+    );
     if mid_dim_override > 0 {
         println!("  Mid dim override: {}", mid_dim_override);
     }
-    println!("  LR schedule: {}, phased: {}, g5_normalize: {}",
-        lr_schedule, phased_training, g5_normalize);
+    println!(
+        "  LR schedule: {}, phased: {}, g5_normalize: {}",
+        lr_schedule, phased_training, g5_normalize
+    );
 
     // Build encoder — train tokeniser on corpus + validation + diagnostic sentences
     let validation_sentences = test_sentences();
@@ -637,46 +678,77 @@ fn main() {
     }
 
     // Build resolver from config (includes calibration pass)
-    let actual_mid_dim = if mid_dim_override > 0 { mid_dim_override } else { input_dim / 2 };
-    let mut resolver = HierarchicalResolver::build_with_axiom_config_mid_dim(input_dim, &config, actual_mid_dim);
-    println!("  Node mid_dim: {} ({})", actual_mid_dim,
-        if mid_dim_override > 0 { "override" } else { "default" });
+    let actual_mid_dim = if mid_dim_override > 0 {
+        mid_dim_override
+    } else {
+        input_dim / 2
+    };
+    let mut resolver =
+        HierarchicalResolver::build_with_axiom_config_mid_dim(input_dim, &config, actual_mid_dim);
+    println!(
+        "  Node mid_dim: {} ({})",
+        actual_mid_dim,
+        if mid_dim_override > 0 {
+            "override"
+        } else {
+            "default"
+        }
+    );
 
     // Phase 9: reduce cache threshold from 0.92 to 0.75 to prevent learning starvation
     let cache_threshold = 0.75f32;
     resolver.cache = axiom::cache::EmbeddingCache::new(256, cache_threshold);
-    println!("  Cache threshold override: {:.2} (Phase 9 — prevent learning starvation)", cache_threshold);
+    println!(
+        "  Cache threshold override: {:.2} (Phase 9 — prevent learning starvation)",
+        cache_threshold
+    );
 
     // Coalition overrides
     resolver.coalition_max_size = coalition_max;
     resolver.coalition_bid_threshold = coalition_thresh;
-    println!("  Coalition: max_size={}, bid_threshold={:.2}", coalition_max, coalition_thresh);
+    println!(
+        "  Coalition: max_size={}, bid_threshold={:.2}",
+        coalition_max, coalition_thresh
+    );
 
     // ── Phase 11: Analytical Surface initialisation ──
     // Encode all simple and complex corpus sentences
-    let simple_tensors: Vec<_> = corpus.simple.iter()
+    let simple_tensors: Vec<_> = corpus
+        .simple
+        .iter()
         .map(|s| encoder.encode_text_readonly(s))
         .collect();
-    let complex_tensors: Vec<_> = corpus.complex.iter()
+    let complex_tensors: Vec<_> = corpus
+        .complex
+        .iter()
         .map(|s| encoder.encode_text_readonly(s))
         .collect();
 
     // Word counts for length-bucketed G5 penalty
-    let simple_word_counts: Vec<usize> = corpus.simple.iter()
+    let simple_word_counts: Vec<usize> = corpus
+        .simple
+        .iter()
         .map(|s| s.split_whitespace().count())
         .collect();
-    let complex_word_counts: Vec<usize> = corpus.complex.iter()
+    let complex_word_counts: Vec<usize> = corpus
+        .complex
+        .iter()
         .map(|s| s.split_whitespace().count())
         .collect();
 
-    let (dir_norm, simple_norm, complex_norm, mean_cosine) =
-        resolver.init_surface_analytical_bucketed(
-            &simple_tensors, &complex_tensors,
-            &simple_word_counts, &complex_word_counts,
+    let (dir_norm, simple_norm, complex_norm, mean_cosine) = resolver
+        .init_surface_analytical_bucketed(
+            &simple_tensors,
+            &complex_tensors,
+            &simple_word_counts,
+            &complex_word_counts,
         );
 
     println!("  Analytical Surface initialisation:");
-    println!("    discrimination_direction norm (pre-L2): {:.6}", dir_norm);
+    println!(
+        "    discrimination_direction norm (pre-L2): {:.6}",
+        dir_norm
+    );
     println!("    simple_mean norm:  {:.4}", simple_norm);
     println!("    complex_mean norm: {:.4}", complex_norm);
     println!("    cosine(simple_mean, complex_mean): {:.6}", mean_cosine);
@@ -688,36 +760,58 @@ fn main() {
         println!("    G5 penalty weight override: {}", g5_weight);
     }
     resolver.set_contrastive_lr_all_surface(contrastive_lr_override);
-    println!("    Contrastive LR (all Surface): {}", contrastive_lr_override);
+    println!(
+        "    Contrastive LR (all Surface): {}",
+        contrastive_lr_override
+    );
 
     // G4 magnitude penalty (complexity scalars, dims 101-115)
     if g4_weight > 0.0 {
         let g4_start = 26 + 36 + 39; // = 101
-        let g4_end = g4_start + 15;   // = 116
-        // Compute G4 norms from corpus
+        let g4_end = g4_start + 15; // = 116
+                                    // Compute G4 norms from corpus
         let g4_simple_norm = {
-            let mean: Vec<f32> = (0..input_dim).map(|d| {
-                simple_tensors.iter().map(|t| t.data[d]).sum::<f32>() / simple_tensors.len() as f32
-            }).collect();
-            mean[g4_start..g4_end].iter().map(|v| v * v).sum::<f32>().sqrt()
+            let mean: Vec<f32> = (0..input_dim)
+                .map(|d| {
+                    simple_tensors.iter().map(|t| t.data[d]).sum::<f32>()
+                        / simple_tensors.len() as f32
+                })
+                .collect();
+            mean[g4_start..g4_end]
+                .iter()
+                .map(|v| v * v)
+                .sum::<f32>()
+                .sqrt()
         };
         let g4_complex_norm = {
-            let mean: Vec<f32> = (0..input_dim).map(|d| {
-                complex_tensors.iter().map(|t| t.data[d]).sum::<f32>() / complex_tensors.len() as f32
-            }).collect();
-            mean[g4_start..g4_end].iter().map(|v| v * v).sum::<f32>().sqrt()
+            let mean: Vec<f32> = (0..input_dim)
+                .map(|d| {
+                    complex_tensors.iter().map(|t| t.data[d]).sum::<f32>()
+                        / complex_tensors.len() as f32
+                })
+                .collect();
+            mean[g4_start..g4_end]
+                .iter()
+                .map(|v| v * v)
+                .sum::<f32>()
+                .sqrt()
         };
         let g4_params = Some((g4_start, g4_end, g4_simple_norm, g4_complex_norm, g4_weight));
         resolver.set_g4_penalty_all_surface(g4_params);
-        println!("    G4 penalty: weight={}, simple_norm={:.4}, complex_norm={:.4}",
-            g4_weight, g4_simple_norm, g4_complex_norm);
+        println!(
+            "    G4 penalty: weight={}, simple_norm={:.4}, complex_norm={:.4}",
+            g4_weight, g4_simple_norm, g4_complex_norm
+        );
     }
 
     // Confidence mix ratio override
     if (confidence_base_weight - 0.7).abs() > 1e-6 {
         resolver.set_confidence_base_weight_all(confidence_base_weight);
-        println!("    Confidence mix override: {:.1}/{:.1} (base/cosine)",
-            confidence_base_weight, 1.0 - confidence_base_weight);
+        println!(
+            "    Confidence mix override: {:.1}/{:.1} (base/cosine)",
+            confidence_base_weight,
+            1.0 - confidence_base_weight
+        );
     }
     println!();
 
@@ -725,17 +819,28 @@ fn main() {
     let rd_mean_cos = resolver.init_reasoning_deep_orthogonal();
     let (rd_pairwise_mean, rd_pairwise_max) = resolver.rd_pairwise_cosine();
     println!("  Phase 13: Orthogonal R+D initialisation:");
-    println!("    Mean |cos| between R+D weight directions: {:.6}", rd_pairwise_mean);
-    println!("    Max  |cos| between R+D weight directions: {:.6}", rd_pairwise_max);
-    println!("    init_reasoning_deep_orthogonal returned:  {:.6}", rd_mean_cos);
+    println!(
+        "    Mean |cos| between R+D weight directions: {:.6}",
+        rd_pairwise_mean
+    );
+    println!(
+        "    Max  |cos| between R+D weight directions: {:.6}",
+        rd_pairwise_max
+    );
+    println!(
+        "    init_reasoning_deep_orthogonal returned:  {:.6}",
+        rd_mean_cos
+    );
     println!();
 
     // Recalibrate after orthogonal init (thresholds shift with new R+D weights)
     resolver.calibrate(input_dim, 0.65, 0.35);
     println!("  Post-orthogonal recalibration:");
-    println!("    surface_threshold: {:.4}  reasoning_threshold: {:.4}",
+    println!(
+        "    surface_threshold: {:.4}  reasoning_threshold: {:.4}",
         resolver.config.surface_confidence_threshold,
-        resolver.config.reasoning_confidence_threshold);
+        resolver.config.reasoning_confidence_threshold
+    );
     println!();
 
     let weight_count = resolver.total_weight_count();
@@ -748,8 +853,10 @@ fn main() {
         resolver.config.surface_confidence_threshold,
         resolver.config.reasoning_confidence_threshold,
     );
-    println!("  Initial weight norms: total={:.4}  surface={:.4}  reasoning+deep={:.4}",
-        initial_weight_norm, initial_surface_norm, initial_nonsurface_norm);
+    println!(
+        "  Initial weight norms: total={:.4}  surface={:.4}  reasoning+deep={:.4}",
+        initial_weight_norm, initial_surface_norm, initial_nonsurface_norm
+    );
     resolver.validate_confidence_invariants();
     println!();
 
@@ -798,7 +905,10 @@ fn main() {
         "─── Text Training: {} iterations ({} passes x {} sentences) ───",
         train_iterations, passes, n_corpus
     );
-    println!("    lr={}, error_lr={}, mode={:?}", learning_rate, error_lr, resolver.mode);
+    println!(
+        "    lr={}, error_lr={}, mode={:?}",
+        learning_rate, error_lr, resolver.mode
+    );
     println!();
 
     let multi = MultiProgress::new();
@@ -854,7 +964,8 @@ fn main() {
         ("the cat that the dog that the man owned chased sat on the mat", "complex"),
         ("she said that he thought that they believed it was true", "complex"),
     ];
-    let failure_tensors: Vec<_> = failure_sentences.iter()
+    let failure_tensors: Vec<_> = failure_sentences
+        .iter()
         .map(|(s, _)| encoder.encode_text_readonly(s))
         .collect();
 
@@ -1134,10 +1245,8 @@ fn main() {
         // Progress bar updates
         if i % 100 == 0 || i == train_iterations - 1 {
             let done = i + 1;
-            let surface_pct =
-                *tier_counts.get("Surface").unwrap() as f32 / done as f32 * 100.0;
-            let reasoning_pct =
-                *tier_counts.get("Reasoning").unwrap() as f32 / done as f32 * 100.0;
+            let surface_pct = *tier_counts.get("Surface").unwrap() as f32 / done as f32 * 100.0;
+            let reasoning_pct = *tier_counts.get("Reasoning").unwrap() as f32 / done as f32 * 100.0;
             let deep_pct = *tier_counts.get("Deep").unwrap() as f32 / done as f32 * 100.0;
             let cache_rate = resolver.cache_hit_rate() * 100.0;
 
@@ -1212,17 +1321,20 @@ fn main() {
     let nonsurface_drift = (final_nonsurface_norm - initial_nonsurface_norm).abs();
     println!(
         "  Surface norm:  {:.4} -> {:.4} (delta {:.4}) {}",
-        initial_surface_norm, final_surface_norm, surface_drift,
-        if surface_drift < 0.001 { "FROZEN" } else { "DRIFTED (contrastive)" }
+        initial_surface_norm,
+        final_surface_norm,
+        surface_drift,
+        if surface_drift < 0.001 {
+            "FROZEN"
+        } else {
+            "DRIFTED (contrastive)"
+        }
     );
     println!(
         "  R+D norm:      {:.4} -> {:.4} (delta {:.4})",
         initial_nonsurface_norm, final_nonsurface_norm, nonsurface_drift
     );
-    println!(
-        "  Contrastive updates: {} total",
-        total_contrastive_updates
-    );
+    println!("  Contrastive updates: {} total", total_contrastive_updates);
     let esc_count = resolver.escalation_penalty_count();
     let cache_rein_count = resolver.cache_reinforcement_count();
     println!(
@@ -1240,9 +1352,16 @@ fn main() {
     println!("  Coalition training stats:");
     println!("    Coalitions formed:  {}", coalition_sizes.len());
     println!("    Mean coalition size: {:.2}", final_coal_size);
-    println!("    R+D pairwise |cos|: {:.6} -> {:.6} (delta {:+.6})",
-        initial_rd_pairwise, final_rd_pw, final_rd_pw - initial_rd_pairwise);
-    println!("    Unique R+D nodes activated: {}", coalition_node_activations.len());
+    println!(
+        "    R+D pairwise |cos|: {:.6} -> {:.6} (delta {:+.6})",
+        initial_rd_pairwise,
+        final_rd_pw,
+        final_rd_pw - initial_rd_pairwise
+    );
+    println!(
+        "    Unique R+D nodes activated: {}",
+        coalition_node_activations.len()
+    );
     // Top 5 most activated
     let mut act_sorted: Vec<(String, usize)> = coalition_node_activations
         .iter()
@@ -1258,12 +1377,11 @@ fn main() {
     // Training snapshot table
     println!("─── Training Snapshot Table ───");
     println!(
-        "  {:>6}  {:>7}  {:>7}  {:>7}  {:>6}  {:>6}  {:>8}  {:>5}  {:>8}  {}",
-        "iter", "s_mean", "c_mean", "gap", "S_nrm", "RD_nrm", "RD_cos", "coal", "contrast", "status"
+        "  {:>6}  {:>7}  {:>7}  {:>7}  {:>6}  {:>6}  {:>8}  {:>5}  {:>8}  status",
+        "iter", "s_mean", "c_mean", "gap", "S_nrm", "RD_nrm", "RD_cos", "coal", "contrast"
     );
     println!(
-        "  {}  {}  {}  {}  {}  {}  {}  {}  {}  {}",
-        "──────", "───────", "───────", "───────", "──────", "──────", "────────", "─────", "────────", "────────"
+        "  ──────  ───────  ───────  ───────  ──────  ──────  ────────  ─────  ────────  ────────"
     );
     for snap in &snapshots {
         let status = if snap.ordering_correct {
@@ -1316,7 +1434,10 @@ fn main() {
     // ═══════════════════════════════════════════════════════
     // Phase 10: Switch to Inference mode for calibration, validation, adversarial
     resolver.mode = RouteMode::Inference;
-    println!("─── Population-Aware Calibration on Text (mode={:?}) ───", resolver.mode);
+    println!(
+        "─── Population-Aware Calibration on Text (mode={:?}) ───",
+        resolver.mode
+    );
 
     // Sample up to 200 sentences (proportional, capped per category)
     let calib_n_simple = corpus.simple.len().min(80);
@@ -1350,8 +1471,7 @@ fn main() {
         complex_calib_confs.push(conf);
     }
 
-    let simple_mean_conf =
-        simple_calib_confs.iter().sum::<f32>() / simple_calib_confs.len() as f32;
+    let simple_mean_conf = simple_calib_confs.iter().sum::<f32>() / simple_calib_confs.len() as f32;
     let complex_mean_conf =
         complex_calib_confs.iter().sum::<f32>() / complex_calib_confs.len() as f32;
     let moderate_mean_conf =
@@ -1371,26 +1491,11 @@ fn main() {
     resolver.config.reasoning_confidence_threshold = reasoning_threshold;
     resolver.rebuild_graph_edges();
 
-    println!(
-        "  Simple mean confidence:    {:.4}",
-        simple_mean_conf
-    );
-    println!(
-        "  Moderate mean confidence:  {:.4}",
-        moderate_mean_conf
-    );
-    println!(
-        "  Complex mean confidence:   {:.4}",
-        complex_mean_conf
-    );
-    println!(
-        "  Surface threshold (midpt): {:.4}",
-        surface_threshold
-    );
-    println!(
-        "  Reasoning threshold (p40): {:.4}",
-        reasoning_threshold
-    );
+    println!("  Simple mean confidence:    {:.4}", simple_mean_conf);
+    println!("  Moderate mean confidence:  {:.4}", moderate_mean_conf);
+    println!("  Complex mean confidence:   {:.4}", complex_mean_conf);
+    println!("  Surface threshold (midpt): {:.4}", surface_threshold);
+    println!("  Reasoning threshold (p40): {:.4}", reasoning_threshold);
 
     // Compute escalation rates
     let simple_escalate = simple_calib_confs
@@ -1445,8 +1550,7 @@ fn main() {
     );
 
     // Reset cache for validation
-    resolver.cache =
-        axiom::cache::EmbeddingCache::new(256, cache_threshold);
+    resolver.cache = axiom::cache::EmbeddingCache::new(256, cache_threshold);
 
     let validation_result =
         run_text_pass(&mut resolver, &encoder, &validation_sentences, "Validation");
@@ -1468,17 +1572,10 @@ fn main() {
             validation_sentences.len()
         );
         println!(
-            "  {:>4}  {:>6}  {:>6}  {:>10}  {}",
-            "rank", "s_conf", "conf", "tier", "sentence"
+            "  {:>4}  {:>6}  {:>6}  {:>10}  sentence",
+            "rank", "s_conf", "conf", "tier"
         );
-        println!(
-            "  {}  {}  {}  {}  {}",
-            "────",
-            "──────",
-            "──────",
-            "──────────",
-            "─".repeat(60)
-        );
+        println!("  ────  ──────  ──────  ──────────  {}", "─".repeat(60));
         for (rank, entry) in all_entries.iter().enumerate() {
             let tag = match entry.complexity.as_str() {
                 "simple" => "[S]",
@@ -1515,11 +1612,18 @@ fn main() {
             .filter(|e| e.complexity == "complex")
             .collect();
 
-        let simple_surf: Vec<f32> = simple_entries.iter().map(|e| e.surface_confidence).collect();
-        let moderate_surf: Vec<f32> =
-            moderate_entries.iter().map(|e| e.surface_confidence).collect();
-        let complex_surf: Vec<f32> =
-            complex_entries.iter().map(|e| e.surface_confidence).collect();
+        let simple_surf: Vec<f32> = simple_entries
+            .iter()
+            .map(|e| e.surface_confidence)
+            .collect();
+        let moderate_surf: Vec<f32> = moderate_entries
+            .iter()
+            .map(|e| e.surface_confidence)
+            .collect();
+        let complex_surf: Vec<f32> = complex_entries
+            .iter()
+            .map(|e| e.surface_confidence)
+            .collect();
 
         let mean = |v: &[f32]| -> f32 { v.iter().sum::<f32>() / v.len().max(1) as f32 };
         let std_d = |v: &[f32]| -> f32 {
@@ -1597,7 +1701,10 @@ fn main() {
             ("complex", &complex_entries),
         ] {
             let n = entries.len();
-            let s_count = entries.iter().filter(|e| e.tier_reached == "Surface").count();
+            let s_count = entries
+                .iter()
+                .filter(|e| e.tier_reached == "Surface")
+                .count();
             let r_count = entries
                 .iter()
                 .filter(|e| e.tier_reached == "Reasoning")
@@ -1667,9 +1774,7 @@ fn main() {
         if ordering_ok {
             println!("  VERDICT: Full ordering CORRECT (simple > moderate > complex)");
         } else if partial_ok {
-            println!(
-                "  VERDICT: Partial ordering (simple > complex) but moderate out of place"
-            );
+            println!("  VERDICT: Partial ordering (simple > complex) but moderate out of place");
         } else {
             println!("  VERDICT: Ordering INVERTED (simple <= complex)");
         }
@@ -1684,7 +1789,10 @@ fn main() {
     // ADVERSARIAL PASS — G5 penalty weight=0.25
     // ═══════════════════════════════════════════════════════
     let adversarial_count = 41;
-    println!("─── Adversarial Pass ({} sentences, G5={}) ───", adversarial_count, g5_weight);
+    println!(
+        "─── Adversarial Pass ({} sentences, G5={}) ───",
+        adversarial_count, g5_weight
+    );
 
     let adversarial_sentences: Vec<(&str, &str)> = vec![
         // Very short complex
@@ -1744,18 +1852,17 @@ fn main() {
     let mut adv_scored = 0usize;
 
     println!(
-        "  {:>4}  {:>6}  {:>6}  {:>10}  {:>8}  {:>7}  {}",
-        "rank", "s_conf", "conf", "tier", "expect", "correct", "sentence"
+        "  {:>4}  {:>6}  {:>6}  {:>10}  {:>8}  {:>7}  sentence",
+        "rank", "s_conf", "conf", "tier", "expect", "correct"
     );
     println!(
-        "  {}  {}  {}  {}  {}  {}  {}",
-        "────", "──────", "──────", "──────────", "────────", "───────", "─".repeat(55)
+        "  ────  ──────  ──────  ──────────  ────────  ───────  {}",
+        "─".repeat(55)
     );
 
     for (i, (sentence, complexity)) in adversarial_sentences.iter().enumerate() {
         // Reset cache before each sentence to prevent cross-contamination
-        resolver.cache =
-            axiom::cache::EmbeddingCache::new(256, cache_threshold);
+        resolver.cache = axiom::cache::EmbeddingCache::new(256, cache_threshold);
         let tensor = encoder.encode_text_readonly(sentence);
         let surface_conf = resolver.max_surface_confidence(&tensor);
         let result = resolver.resolve(&tensor);
@@ -1764,11 +1871,21 @@ fn main() {
         let correct = match *complexity {
             "simple" => {
                 adv_scored += 1;
-                if tier_name == "Surface" { adv_correct += 1; "yes" } else { "no" }
+                if tier_name == "Surface" {
+                    adv_correct += 1;
+                    "yes"
+                } else {
+                    "no"
+                }
             }
             "complex" => {
                 adv_scored += 1;
-                if tier_name != "Surface" { adv_correct += 1; "yes" } else { "no" }
+                if tier_name != "Surface" {
+                    adv_correct += 1;
+                    "yes"
+                } else {
+                    "no"
+                }
             }
             _ => "—",
         };
@@ -1784,10 +1901,19 @@ fn main() {
         );
         // Print coalition details for escalated sentences
         if let Some(ref coalition) = result.coalition {
-            let members_str: Vec<String> = coalition.members.iter()
-                .map(|m| format!("{}({:?}, bid={:.3}, conf={:.3}{})",
-                    m.node_id, m.tier, m.bid_score, m.confidence_out,
-                    if m.fired { ", FIRED" } else { "" }))
+            let members_str: Vec<String> = coalition
+                .members
+                .iter()
+                .map(|m| {
+                    format!(
+                        "{}({:?}, bid={:.3}, conf={:.3}{})",
+                        m.node_id,
+                        m.tier,
+                        m.bid_score,
+                        m.confidence_out,
+                        if m.fired { ", FIRED" } else { "" }
+                    )
+                })
                 .collect();
             println!(
                 "        coalition: [{}] → resolved_by={} cross_tier={}",
@@ -1800,7 +1926,8 @@ fn main() {
     println!();
     println!(
         "  Adversarial score: {}/{} correct ({:.1}%)",
-        adv_correct, adv_scored,
+        adv_correct,
+        adv_scored,
         adv_correct as f32 / adv_scored as f32 * 100.0
     );
     println!("  Phase 12 baseline (original 17 scored): 8/17 (47.1%)");
@@ -1808,7 +1935,13 @@ fn main() {
     println!(
         "  Delta: {:+} ({})",
         delta,
-        if delta > 0 { "IMPROVED" } else if delta == 0 { "unchanged" } else { "REGRESSED" }
+        if delta > 0 {
+            "IMPROVED"
+        } else if delta == 0 {
+            "unchanged"
+        } else {
+            "REGRESSED"
+        }
     );
     println!();
 
@@ -1833,16 +1966,25 @@ fn main() {
         let tier_name = result.tier_reached.name();
 
         println!("  \"{}\"  [expected: {}]", sentence, expected);
-        println!("  Surface confidence: {:.4} (threshold: {:.4}) → ESCALATE",
-            surface_conf, resolver.config.surface_confidence_threshold);
+        println!(
+            "  Surface confidence: {:.4} (threshold: {:.4}) → ESCALATE",
+            surface_conf, resolver.config.surface_confidence_threshold
+        );
 
         if let Some(ref coal) = result.coalition {
             // Draw ASCII coalition diagram
             println!("  ┌─────────────────────────────────────────────┐");
-            println!("  │  INPUT  ──→  BIDDING ({} R+D nodes)          │", coal.bid_count);
+            println!(
+                "  │  INPUT  ──→  BIDDING ({} R+D nodes)          │",
+                coal.bid_count
+            );
             println!("  │                  │                           │");
             for m in &coal.members {
-                let arrow = if m.node_id == coal.resolved_by { "★" } else { " " };
+                let arrow = if m.node_id == coal.resolved_by {
+                    "★"
+                } else {
+                    " "
+                };
                 println!(
                     "  │             {:>20} bid={:.3} {}   │",
                     m.node_id, m.bid_score, arrow
@@ -1854,10 +1996,16 @@ fn main() {
                 println!("  │                  │                           │");
             }
             println!("  │          resolved_by: {:>20}   │", coal.resolved_by);
-            println!("  │          tier: {:?}  conf: {:.4}            │", coal.resolved_tier, coal.resolution_confidence);
+            println!(
+                "  │          tier: {:?}  conf: {:.4}            │",
+                coal.resolved_tier, coal.resolution_confidence
+            );
             println!("  └─────────────────────────────────────────────┘");
         }
-        println!("  Final: tier={}, confidence={:.4}", tier_name, result.route.confidence);
+        println!(
+            "  Final: tier={}, confidence={:.4}",
+            tier_name, result.route.confidence
+        );
         println!();
     }
 
@@ -1865,8 +2013,12 @@ fn main() {
     println!("─── Phase 14: Three Questions ───");
     println!();
     println!("  Q1: Did G5 structural features improve adversarial routing?");
-    println!("      Adversarial score: {}/{} ({:.1}%) vs Phase 12 baseline 47.1%",
-        adv_correct, adv_scored, adv_correct as f32 / adv_scored as f32 * 100.0);
+    println!(
+        "      Adversarial score: {}/{} ({:.1}%) vs Phase 12 baseline 47.1%",
+        adv_correct,
+        adv_scored,
+        adv_correct as f32 / adv_scored as f32 * 100.0
+    );
     if (adv_correct as f32 / adv_scored as f32) > 0.471 {
         println!("      YES — G5 magnitude penalty correctly escalates sentences");
         println!("      with complex syntactic structure (nested clauses, garden paths).");
@@ -1903,9 +2055,14 @@ fn main() {
     println!("  Total parameters:        {}", weight_count);
     println!("  Training iterations:     {}", train_iterations);
     println!("  G5 penalty weight:       {}", g5_weight);
-    println!("  G5 norms:                simple={:.4}  complex={:.4}",
-        resolver.g5_simple_mean_norm, resolver.g5_complex_mean_norm);
-    println!("  Surface weight norm:     {:.4} (constant — frozen)", initial_surface_norm);
+    println!(
+        "  G5 norms:                simple={:.4}  complex={:.4}",
+        resolver.g5_simple_mean_norm, resolver.g5_complex_mean_norm
+    );
+    println!(
+        "  Surface weight norm:     {:.4} (constant — frozen)",
+        initial_surface_norm
+    );
     let final_rd_norm = final_weight_norm - initial_surface_norm;
     println!("  R+D weight norm:         {:.4} (final)", final_rd_norm);
     println!(
@@ -1918,9 +2075,16 @@ fn main() {
     );
     println!("  Coalitions formed:       {}", coalition_sizes.len());
     println!("  Mean coalition size:     {:.2}", final_coal_size);
-    println!("  R+D pairwise |cos|:      {:.6} -> {:.6}", initial_rd_pairwise, final_rd_pw);
-    println!("  Adversarial score:       {}/{} ({:.1}%)",
-        adv_correct, adv_scored, adv_correct as f32 / adv_scored as f32 * 100.0);
+    println!(
+        "  R+D pairwise |cos|:      {:.6} -> {:.6}",
+        initial_rd_pairwise, final_rd_pw
+    );
+    println!(
+        "  Adversarial score:       {}/{} ({:.1}%)",
+        adv_correct,
+        adv_scored,
+        adv_correct as f32 / adv_scored as f32 * 100.0
+    );
     println!("  Logs: axiom_*_log.json, axiom_coalition_log.json, axiom_validation.json");
     println!("═══════════════════════════════════════════════════════════════");
 
