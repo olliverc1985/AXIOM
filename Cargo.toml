@@ -1,11 +1,11 @@
 [package]
 name = "axiom"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
-description = "AXIOM — Adaptive eXecution with Intelligent Operations Memory. Sparse dynamic routing for cost-efficient LLM inference."
+description = "Lightweight Rust ML framework for training and deploying small transformer classifiers. Zero ML dependencies. 90us inference."
 license = "MIT"
 repository = "https://github.com/olliverc1985/AXIOM"
-keywords = ["llm", "routing", "sparse-computation", "machine-learning", "inference"]
+keywords = ["machine-learning", "transformer", "classifier", "text-classification", "inference"]
 categories = ["science", "algorithms"]
 
 [features]
@@ -25,18 +25,36 @@ metal = { version = "0.29", optional = true }
 name = "axiom"
 path = "src/lib.rs"
 
-[[bin]]
-name = "train_axiom"
-path = "src/bin/train_axiom.rs"
+# ── LLM Routing examples ────────────────────────────────────────────
 
-[[bin]]
-name = "eval_axiom"
-path = "src/bin/eval_axiom.rs"
+[[example]]
+name = "train-axiom"
+path = "examples/llm-routing/train.rs"
 
-[[bin]]
+[[example]]
+name = "eval-axiom"
+path = "examples/llm-routing/eval.rs"
+
+[[example]]
+name = "routerbench-eval"
+path = "examples/llm-routing/routerbench.rs"
+
+# ── Graph architecture benchmark ────────────────────────────────────
+
+[[example]]
 name = "axiom-bench"
-path = "src/bin/bench.rs"
+path = "examples/bench/main.rs"
 
-[[bin]]
-name = "routerbench_eval"
-path = "src/bin/routerbench_eval.rs"
+# ── Skeleton examples ───────────────────────────────────────────────
+
+[[example]]
+name = "fraud-detection"
+path = "examples/fraud-detection/main.rs"
+
+[[example]]
+name = "content-moderation"
+path = "examples/content-moderation/main.rs"
+
+[[example]]
+name = "query-triage"
+path = "examples/query-triage/main.rs"
