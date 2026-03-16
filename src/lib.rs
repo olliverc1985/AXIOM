@@ -10,6 +10,7 @@
 #![allow(clippy::manual_memcpy)]
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::approx_constant)]
 
 pub mod cache;
 pub mod gpu;
