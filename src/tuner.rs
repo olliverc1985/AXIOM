@@ -42,8 +42,8 @@ pub struct BenchStats {
 
 /// Compute statistics from a bench log file.
 pub fn compute_stats(log_path: &str) -> Result<BenchStats, String> {
-    let data =
-        std::fs::read_to_string(log_path).map_err(|e| format!("Failed to read {}: {}", log_path, e))?;
+    let data = std::fs::read_to_string(log_path)
+        .map_err(|e| format!("Failed to read {}: {}", log_path, e))?;
     let entries: Vec<LogEntry> =
         serde_json::from_str(&data).map_err(|e| format!("Failed to parse {}: {}", log_path, e))?;
 
@@ -52,8 +52,14 @@ pub fn compute_stats(log_path: &str) -> Result<BenchStats, String> {
     }
 
     let total = entries.len();
-    let surface = entries.iter().filter(|e| e.tier_reached == "Surface").count();
-    let reasoning = entries.iter().filter(|e| e.tier_reached == "Reasoning").count();
+    let surface = entries
+        .iter()
+        .filter(|e| e.tier_reached == "Surface")
+        .count();
+    let reasoning = entries
+        .iter()
+        .filter(|e| e.tier_reached == "Reasoning")
+        .count();
     let deep = entries.iter().filter(|e| e.tier_reached == "Deep").count();
     let cache_hits = entries.iter().filter(|e| e.from_cache).count();
     let avg_confidence = entries.iter().map(|e| e.confidence).sum::<f32>() / total as f32;
@@ -96,7 +102,10 @@ pub fn tune(stats: &BenchStats, current: &AxiomConfig) -> AxiomConfig {
             stats.deep_pct, config.reasoning_base_confidence
         ));
     } else {
-        reasons.push(format!("Deep {:.1}% in range [10%, 25%] → no change", stats.deep_pct));
+        reasons.push(format!(
+            "Deep {:.1}% in range [10%, 25%] → no change",
+            stats.deep_pct
+        ));
     }
 
     // Cache hit rate rules
@@ -139,7 +148,8 @@ pub fn tune(stats: &BenchStats, current: &AxiomConfig) -> AxiomConfig {
     let min_base = (config.reasoning_confidence_threshold - 0.3) / 0.7;
     if config.reasoning_base_confidence < min_base + 0.02 {
         config.reasoning_base_confidence = min_base + 0.02;
-        reasons.push("floor applied to reasoning_base_confidence to ensure reachability".to_string());
+        reasons
+            .push("floor applied to reasoning_base_confidence to ensure reachability".to_string());
     }
 
     config.rationale = reasons.join("; ");

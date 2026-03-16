@@ -92,9 +92,7 @@ impl DashboardState {
 /// Parse the request line from a TCP stream.
 /// Reads headers fully so the connection is in a clean state for the response.
 fn parse_request(stream: &mut TcpStream) -> Option<String> {
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .ok();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let mut reader = BufReader::new(stream.try_clone().ok()?);
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).ok()? == 0 {
@@ -144,10 +142,7 @@ fn handle_connection(mut stream: TcpStream, state: &Arc<Mutex<DashboardState>>) 
     };
 
     // Route: "GET / HTTP/1.1" or "GET /state HTTP/1.1"
-    let path = request_line
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or("");
+    let path = request_line.split_whitespace().nth(1).unwrap_or("");
 
     match path {
         "/" => {
@@ -162,12 +157,7 @@ fn handle_connection(mut stream: TcpStream, state: &Arc<Mutex<DashboardState>>) 
             let s = state.lock().unwrap();
             let json = serde_json::to_string(&*s).unwrap_or_default();
             drop(s);
-            send_response(
-                &mut stream,
-                "200 OK",
-                "application/json",
-                json.as_bytes(),
-            );
+            send_response(&mut stream, "200 OK", "application/json", json.as_bytes());
         }
         // Favicon — Safari always requests this
         "/favicon.ico" => {

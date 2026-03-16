@@ -171,8 +171,7 @@ impl SparseGraph {
             let mut next_node: Option<String> = None;
 
             for edge in outgoing {
-                if edge.should_traverse(confidence, current_tier)
-                    && !visited.contains_key(&edge.to)
+                if edge.should_traverse(confidence, current_tier) && !visited.contains_key(&edge.to)
                 {
                     next_node = Some(edge.to.clone());
                     break; // Take the first valid edge
@@ -220,10 +219,18 @@ impl SparseGraph {
     /// `input` is the original input tensor, `signal` is +1.0 (reinforce) or -1.0 (suppress).
     /// `total_iterations` is the pass iteration count for computing effective_lr.
     /// effective_lr = base_lr * (total_iterations / (node_activation_count + 1))
-    pub fn hebbian_update_all(&mut self, input: &Tensor, signal: f32, learning_rate: f32, total_iterations: usize) {
+    pub fn hebbian_update_all(
+        &mut self,
+        input: &Tensor,
+        signal: f32,
+        learning_rate: f32,
+        total_iterations: usize,
+    ) {
         let max_lr = learning_rate * 10.0;
         for node in &mut self.nodes {
-            let effective_lr = (learning_rate * (total_iterations as f32 / (node.activation_count() as f32 + 1.0))).min(max_lr);
+            let effective_lr = (learning_rate
+                * (total_iterations as f32 / (node.activation_count() as f32 + 1.0)))
+                .min(max_lr);
             let output = node.forward(input);
             node.hebbian_update(input, &output.tensor, signal, effective_lr);
         }
@@ -298,7 +305,9 @@ impl SparseGraph {
     /// Apply contrastive update on all Surface-tier nodes in the graph.
     ///
     /// Returns diagnostic info for each node that performed an update.
-    pub fn apply_contrastive_update_all(&mut self) -> Vec<crate::graph::node::ContrastiveUpdateInfo> {
+    pub fn apply_contrastive_update_all(
+        &mut self,
+    ) -> Vec<crate::graph::node::ContrastiveUpdateInfo> {
         let mut infos = Vec::new();
         for node in &mut self.nodes {
             if node.tier() == Tier::Surface {
@@ -337,8 +346,20 @@ mod tests {
     fn build_simple_graph() -> SparseGraph {
         let mut graph = SparseGraph::new("node_a");
 
-        graph.add_node(Box::new(LinearNode::new("node_a", 4, 4, Tier::Surface, 0.9)));
-        graph.add_node(Box::new(LinearNode::new("node_b", 4, 4, Tier::Surface, 0.8)));
+        graph.add_node(Box::new(LinearNode::new(
+            "node_a",
+            4,
+            4,
+            Tier::Surface,
+            0.9,
+        )));
+        graph.add_node(Box::new(LinearNode::new(
+            "node_b",
+            4,
+            4,
+            Tier::Surface,
+            0.8,
+        )));
         graph.add_node(Box::new(LinearNode::new(
             "node_c",
             4,

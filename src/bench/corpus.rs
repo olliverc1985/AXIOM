@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Complexity {
@@ -2874,7 +2874,8 @@ impl Corpus {
     }
 
     pub fn all(&self) -> Vec<(String, Complexity)> {
-        let mut result = Vec::with_capacity(self.simple.len() + self.moderate.len() + self.complex.len());
+        let mut result =
+            Vec::with_capacity(self.simple.len() + self.moderate.len() + self.complex.len());
         for s in &self.simple {
             result.push((s.clone(), Complexity::Simple));
         }
@@ -2914,10 +2915,7 @@ impl Corpus {
             indices.swap(i, j);
         }
 
-        indices[..n]
-            .iter()
-            .map(|&i| all[i].clone())
-            .collect()
+        indices[..n].iter().map(|&i| all[i].clone()).collect()
     }
 }
 
@@ -2928,10 +2926,26 @@ mod tests {
     #[test]
     fn test_corpus_counts() {
         let corpus = Corpus::load();
-        assert!(corpus.simple.len() >= 800, "expected >= 800 simple sentences, got {}", corpus.simple.len());
-        assert!(corpus.moderate.len() >= 850, "expected >= 850 moderate sentences, got {}", corpus.moderate.len());
-        assert!(corpus.complex.len() >= 850, "expected >= 850 complex sentences, got {}", corpus.complex.len());
-        assert!(corpus.all().len() >= 2500, "expected >= 2500 total sentences, got {}", corpus.all().len());
+        assert!(
+            corpus.simple.len() >= 800,
+            "expected >= 800 simple sentences, got {}",
+            corpus.simple.len()
+        );
+        assert!(
+            corpus.moderate.len() >= 850,
+            "expected >= 850 moderate sentences, got {}",
+            corpus.moderate.len()
+        );
+        assert!(
+            corpus.complex.len() >= 850,
+            "expected >= 850 complex sentences, got {}",
+            corpus.complex.len()
+        );
+        assert!(
+            corpus.all().len() >= 2500,
+            "expected >= 2500 total sentences, got {}",
+            corpus.all().len()
+        );
     }
 
     #[test]
@@ -2948,7 +2962,10 @@ mod tests {
         let a = corpus.sample(10, 1);
         let b = corpus.sample(10, 2);
         let different = a.iter().zip(b.iter()).any(|(x, y)| x != y);
-        assert!(different, "different seeds should produce at least one differing element");
+        assert!(
+            different,
+            "different seeds should produce at least one differing element"
+        );
     }
 
     #[test]

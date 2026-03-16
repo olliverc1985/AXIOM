@@ -306,7 +306,10 @@ impl HierarchicalResolver {
         let mut best: Option<(NodeOutput, String)> = None;
         for node in nodes {
             let output = node.forward(input);
-            if best.as_ref().map_or(true, |(b, _)| output.confidence > b.confidence) {
+            if best
+                .as_ref()
+                .is_none_or(|(b, _)| output.confidence > b.confidence)
+            {
                 best = Some((output, node.node_id().to_string()));
             }
         }
@@ -334,11 +337,7 @@ impl HierarchicalResolver {
                 continue;
             }
             // Find the target among lateral_nodes
-            if let Some(target_node) = self
-                .lateral_nodes
-                .iter()
-                .find(|n| n.node_id() == edge.to)
-            {
+            if let Some(target_node) = self.lateral_nodes.iter().find(|n| n.node_id() == edge.to) {
                 lateral_count += 1;
                 let output = target_node.forward(input);
                 steps.push(TraceStep {
@@ -351,7 +350,7 @@ impl HierarchicalResolver {
                 });
                 if best
                     .as_ref()
-                    .map_or(true, |b| output.confidence > b.confidence)
+                    .is_none_or(|b| output.confidence > b.confidence)
                 {
                     best = Some(output);
                 }
@@ -438,9 +437,7 @@ impl HierarchicalResolver {
             // for escalation decisions — not the graph route confidence, which
             // chains nodes and inflates the value.
             let mut max_standalone_conf = f32::NEG_INFINITY;
-            if let Some(surface_out) =
-                Self::run_tier_nodes_with_id(&self.surface_nodes, input)
-            {
+            if let Some(surface_out) = Self::run_tier_nodes_with_id(&self.surface_nodes, input) {
                 total_cost += surface_out.0.compute_cost;
                 max_standalone_conf = surface_out.0.confidence;
                 if surface_out.0.confidence > confidence {
@@ -519,7 +516,11 @@ impl HierarchicalResolver {
         // Capture Surface state before potential escalation (for error signal).
         // Use escalation_conf (standalone node max) for the surface_confidence
         // field so error signals and contrastive learning see the right value.
-        let surface_confidence = if from_cache { confidence } else { escalation_conf };
+        let surface_confidence = if from_cache {
+            confidence
+        } else {
+            escalation_conf
+        };
         let surface_producer_id = producer_node_id.clone();
         let surface_output = if !from_cache {
             Some(current_tensor.clone())
@@ -560,36 +561,50 @@ impl HierarchicalResolver {
 
             // Graph R+D nodes
             for (idx, node) in self.graph.nodes_ref().iter().enumerate() {
-                if node.tier() == Tier::Surface { continue; }
+                if node.tier() == Tier::Surface {
+                    continue;
+                }
                 let dir = node.weight_direction();
-                if dir.is_empty() { continue; }
+                if dir.is_empty() {
+                    continue;
+                }
                 let dot: f32 = input_slice.iter().zip(dir.iter()).map(|(a, b)| a * b).sum();
                 let dir_norm: f32 = dir.iter().map(|x| x * x).sum::<f32>().sqrt();
                 let cos = if input_norm > 1e-8 && dir_norm > 1e-8 {
                     (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
-                } else { 0.0 };
+                } else {
+                    0.0
+                };
                 bids.push((node.node_id().to_string(), node.tier(), cos, idx, true));
             }
             // Standalone reasoning nodes
             for (idx, node) in self.reasoning_nodes.iter().enumerate() {
                 let dir = node.weight_direction();
-                if dir.is_empty() { continue; }
+                if dir.is_empty() {
+                    continue;
+                }
                 let dot: f32 = input_slice.iter().zip(dir.iter()).map(|(a, b)| a * b).sum();
                 let dir_norm: f32 = dir.iter().map(|x| x * x).sum::<f32>().sqrt();
                 let cos = if input_norm > 1e-8 && dir_norm > 1e-8 {
                     (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
-                } else { 0.0 };
+                } else {
+                    0.0
+                };
                 bids.push((node.node_id().to_string(), Tier::Reasoning, cos, idx, false));
             }
             // Standalone deep nodes
             for (idx, node) in self.deep_nodes.iter().enumerate() {
                 let dir = node.weight_direction();
-                if dir.is_empty() { continue; }
+                if dir.is_empty() {
+                    continue;
+                }
                 let dot: f32 = input_slice.iter().zip(dir.iter()).map(|(a, b)| a * b).sum();
                 let dir_norm: f32 = dir.iter().map(|x| x * x).sum::<f32>().sqrt();
                 let cos = if input_norm > 1e-8 && dir_norm > 1e-8 {
                     (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
-                } else { 0.0 };
+                } else {
+                    0.0
+                };
                 bids.push((node.node_id().to_string(), Tier::Deep, cos, idx, false));
             }
 
@@ -617,7 +632,9 @@ impl HierarchicalResolver {
                 let mut chosen = Vec::with_capacity(max_k);
                 for _ in 0..max_k {
                     let total_weight: f32 = qualified.iter().map(|b| b.2).sum();
-                    if total_weight < 1e-8 { break; }
+                    if total_weight < 1e-8 {
+                        break;
+                    }
                     // xorshift64 PRNG step
                     self.coalition_rng ^= self.coalition_rng << 13;
                     self.coalition_rng ^= self.coalition_rng >> 7;
@@ -691,14 +708,14 @@ impl HierarchicalResolver {
             if let Some(best_tensor) = best_member_tensor {
                 // Step 5: Cross-tier connection — Reasoning→Deep blend
                 // If resolver is Deep and a Reasoning node bid > 0.5, blend outputs
-                current_tensor = if best_member_tier == Tier::Deep
-                    && best_reasoning_bid > 0.5
-                    && best_reasoning_tensor.is_some()
-                {
-                    cross_tier_fired = true;
-                    let r_tensor = best_reasoning_tensor.unwrap();
-                    // Blend: 0.3 Reasoning + 0.7 Deep
-                    best_tensor.blend(&r_tensor, 0.7)
+                current_tensor = if best_member_tier == Tier::Deep && best_reasoning_bid > 0.5 {
+                    if let Some(r_tensor) = best_reasoning_tensor {
+                        cross_tier_fired = true;
+                        // Blend: 0.3 Reasoning + 0.7 Deep
+                        best_tensor.blend(&r_tensor, 0.7)
+                    } else {
+                        best_tensor
+                    }
                 } else {
                     best_tensor
                 };
@@ -746,9 +763,9 @@ impl HierarchicalResolver {
             }
 
             // Compute input hash for logging
-            let hash_val: u64 = input.data.iter()
-                .take(16)
-                .fold(0u64, |h, &v| h.wrapping_mul(31).wrapping_add(v.to_bits() as u64));
+            let hash_val: u64 = input.data.iter().take(16).fold(0u64, |h, &v| {
+                h.wrapping_mul(31).wrapping_add(v.to_bits() as u64)
+            });
             let input_hash = format!("{:016x}", hash_val);
 
             let coalition = Coalition {
@@ -851,7 +868,13 @@ impl HierarchicalResolver {
     ///
     /// This is local learning — no backprop, no global gradient. Each node adjusts
     /// its weights based on its own input/output correlation and the tier signal.
-    pub fn learn(&mut self, input: &Tensor, result: &ResolveResult, learning_rate: f32, total_iterations: usize) {
+    pub fn learn(
+        &mut self,
+        input: &Tensor,
+        result: &ResolveResult,
+        learning_rate: f32,
+        total_iterations: usize,
+    ) {
         if result.from_cache {
             return; // No learning on cache hits
         }
@@ -891,15 +914,23 @@ impl HierarchicalResolver {
             // Coalition learning: only fired coalition members get Oja updates.
             // Surface is frozen and never participates in coalitions.
             // Non-fired nodes receive no update — differential activation drives specialisation.
-            let fired_ids: Vec<&str> = coalition.members.iter()
+            let fired_ids: Vec<&str> = coalition
+                .members
+                .iter()
                 .filter(|m| m.fired)
                 .map(|m| m.node_id.as_str())
                 .collect();
 
             // Update graph R+D nodes that participated
             for node in self.graph.nodes_mut() {
-                if node.tier() == Tier::Surface || node.is_frozen() { continue; }
-                let signal = if fired_ids.contains(&node.node_id()) { 1.0 } else { 0.0 };
+                if node.tier() == Tier::Surface || node.is_frozen() {
+                    continue;
+                }
+                let signal = if fired_ids.contains(&node.node_id()) {
+                    1.0
+                } else {
+                    0.0
+                };
                 if signal > 0.0 {
                     let output = node.forward(input);
                     node.hebbian_update(input, &output.tensor, signal, learning_rate);
@@ -907,7 +938,11 @@ impl HierarchicalResolver {
             }
             // Update standalone reasoning nodes that participated
             for node in self.reasoning_nodes.iter_mut() {
-                let signal = if fired_ids.contains(&node.node_id()) { 1.0 } else { 0.0 };
+                let signal = if fired_ids.contains(&node.node_id()) {
+                    1.0
+                } else {
+                    0.0
+                };
                 if signal > 0.0 {
                     let output = node.forward(input);
                     node.hebbian_update(input, &output.tensor, signal, learning_rate);
@@ -915,7 +950,11 @@ impl HierarchicalResolver {
             }
             // Update standalone deep nodes that participated
             for node in self.deep_nodes.iter_mut() {
-                let signal = if fired_ids.contains(&node.node_id()) { 1.0 } else { 0.0 };
+                let signal = if fired_ids.contains(&node.node_id()) {
+                    1.0
+                } else {
+                    0.0
+                };
                 if signal > 0.0 {
                     let output = node.forward(input);
                     node.hebbian_update(input, &output.tensor, signal, learning_rate);
@@ -924,9 +963,22 @@ impl HierarchicalResolver {
             // Surface and lateral nodes: no Oja update (frozen / not in coalition)
         } else {
             // No coalition (Surface resolved) — standard tier-based learning
-            Self::hebbian_nodes(&mut self.surface_nodes, input, 1.0, learning_rate, total_iterations);
-            Self::hebbian_nodes(&mut self.lateral_nodes, input, 1.0, learning_rate, total_iterations);
-            self.graph.hebbian_update_all(input, 1.0, learning_rate, total_iterations);
+            Self::hebbian_nodes(
+                &mut self.surface_nodes,
+                input,
+                1.0,
+                learning_rate,
+                total_iterations,
+            );
+            Self::hebbian_nodes(
+                &mut self.lateral_nodes,
+                input,
+                1.0,
+                learning_rate,
+                total_iterations,
+            );
+            self.graph
+                .hebbian_update_all(input, 1.0, learning_rate, total_iterations);
         }
     }
 
@@ -963,7 +1015,9 @@ impl HierarchicalResolver {
     ///
     /// Called every 100 iterations during learning. Returns diagnostic info for each
     /// node that actually performed an update (had both positive and negative examples).
-    pub fn apply_contrastive_update_all(&mut self) -> Vec<crate::graph::node::ContrastiveUpdateInfo> {
+    pub fn apply_contrastive_update_all(
+        &mut self,
+    ) -> Vec<crate::graph::node::ContrastiveUpdateInfo> {
         use crate::graph::node::ContrastiveUpdateInfo;
         let mut infos: Vec<ContrastiveUpdateInfo> = Vec::new();
         for node in self.surface_nodes.iter_mut() {
@@ -1082,7 +1136,9 @@ impl HierarchicalResolver {
     ) {
         let max_lr = learning_rate * 10.0;
         for node in nodes.iter_mut() {
-            let effective_lr = (learning_rate * (total_iterations as f32 / (node.activation_count() as f32 + 1.0))).min(max_lr);
+            let effective_lr = (learning_rate
+                * (total_iterations as f32 / (node.activation_count() as f32 + 1.0)))
+                .min(max_lr);
             let output = node.forward(input);
             node.hebbian_update(input, &output.tensor, signal, effective_lr);
         }
@@ -1275,11 +1331,15 @@ impl HierarchicalResolver {
         let mut max_conf = f32::NEG_INFINITY;
         for node in &self.surface_nodes {
             let conf = node.forward(input).confidence;
-            if conf > max_conf { max_conf = conf; }
+            if conf > max_conf {
+                max_conf = conf;
+            }
         }
         for node in &self.lateral_nodes {
             let conf = node.forward(input).confidence;
-            if conf > max_conf { max_conf = conf; }
+            if conf > max_conf {
+                max_conf = conf;
+            }
         }
         max_conf
     }
@@ -1393,7 +1453,11 @@ impl HierarchicalResolver {
         let complex_norm = complex_mean.iter().map(|v| v * v).sum::<f32>().sqrt();
 
         // Cosine similarity between simple_mean and complex_mean
-        let dot: f32 = simple_mean.iter().zip(complex_mean.iter()).map(|(a, b)| a * b).sum();
+        let dot: f32 = simple_mean
+            .iter()
+            .zip(complex_mean.iter())
+            .map(|(a, b)| a * b)
+            .sum();
         let cosine_sim = if simple_norm > 1e-8 && complex_norm > 1e-8 {
             dot / (simple_norm * complex_norm)
         } else {
@@ -1423,38 +1487,45 @@ impl HierarchicalResolver {
 
         // --- Compute per-bucket G5 norms ---
         // Helper: compute G5 norm of the mean vector for a subset of tensors.
-        let g5_bucket_norm = |tensors: &[Tensor], word_counts: &[usize], lo: usize, hi_inclusive: usize| -> f32 {
-            let mut mean = vec![0.0f32; dim];
-            let mut count = 0usize;
-            for (t, &wc) in tensors.iter().zip(word_counts.iter()) {
-                if wc >= lo && wc <= hi_inclusive {
-                    for (i, v) in t.data.iter().enumerate() {
-                        if i < dim { mean[i] += v; }
+        let g5_bucket_norm =
+            |tensors: &[Tensor], word_counts: &[usize], lo: usize, hi_inclusive: usize| -> f32 {
+                let mut mean = vec![0.0f32; dim];
+                let mut count = 0usize;
+                for (t, &wc) in tensors.iter().zip(word_counts.iter()) {
+                    if wc >= lo && wc <= hi_inclusive {
+                        for (i, v) in t.data.iter().enumerate() {
+                            if i < dim {
+                                mean[i] += v;
+                            }
+                        }
+                        count += 1;
                     }
-                    count += 1;
                 }
-            }
-            if count == 0 {
-                return 0.0;
-            }
-            let n = count as f32;
-            if G5_OFFSET < dim {
-                mean[G5_OFFSET..g5_end]
-                    .iter()
-                    .map(|v| { let m = v / n; m * m })
-                    .sum::<f32>()
-                    .sqrt()
-            } else {
-                0.0
-            }
-        };
+                if count == 0 {
+                    return 0.0;
+                }
+                let n = count as f32;
+                if G5_OFFSET < dim {
+                    mean[G5_OFFSET..g5_end]
+                        .iter()
+                        .map(|v| {
+                            let m = v / n;
+                            m * m
+                        })
+                        .sum::<f32>()
+                        .sqrt()
+                } else {
+                    0.0
+                }
+            };
 
         let short_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 0, 5);
         let short_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 0, 5);
         let med_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 6, 15);
         let med_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 6, 15);
         let long_simple_norm = g5_bucket_norm(simple_tensors, simple_word_counts, 16, usize::MAX);
-        let long_complex_norm = g5_bucket_norm(complex_tensors, complex_word_counts, 16, usize::MAX);
+        let long_complex_norm =
+            g5_bucket_norm(complex_tensors, complex_word_counts, 16, usize::MAX);
 
         eprintln!(
             "G5 penalty norms: global simple={:.4}, complex={:.4}, gap={:.4}",
@@ -1464,9 +1535,12 @@ impl HierarchicalResolver {
         );
         eprintln!(
             "G5 bucketed norms: short=({:.4},{:.4}) med=({:.4},{:.4}) long=({:.4},{:.4})",
-            short_simple_norm, short_complex_norm,
-            med_simple_norm, med_complex_norm,
-            long_simple_norm, long_complex_norm
+            short_simple_norm,
+            short_complex_norm,
+            med_simple_norm,
+            med_complex_norm,
+            long_simple_norm,
+            long_complex_norm
         );
 
         let init = crate::graph::node::AnalyticalInit {
@@ -1479,13 +1553,37 @@ impl HierarchicalResolver {
         let fb_c = g5_complex_norm;
         let bucketed = Some(crate::graph::node::G5BucketedPenalty {
             g5_start: G5_OFFSET,
-            g5_end: g5_end,
-            short_simple_norm: if short_simple_norm > 0.0 { short_simple_norm } else { fb_s },
-            short_complex_norm: if short_complex_norm > 0.0 { short_complex_norm } else { fb_c },
-            med_simple_norm: if med_simple_norm > 0.0 { med_simple_norm } else { fb_s },
-            med_complex_norm: if med_complex_norm > 0.0 { med_complex_norm } else { fb_c },
-            long_simple_norm: if long_simple_norm > 0.0 { long_simple_norm } else { fb_s },
-            long_complex_norm: if long_complex_norm > 0.0 { long_complex_norm } else { fb_c },
+            g5_end,
+            short_simple_norm: if short_simple_norm > 0.0 {
+                short_simple_norm
+            } else {
+                fb_s
+            },
+            short_complex_norm: if short_complex_norm > 0.0 {
+                short_complex_norm
+            } else {
+                fb_c
+            },
+            med_simple_norm: if med_simple_norm > 0.0 {
+                med_simple_norm
+            } else {
+                fb_s
+            },
+            med_complex_norm: if med_complex_norm > 0.0 {
+                med_complex_norm
+            } else {
+                fb_c
+            },
+            long_simple_norm: if long_simple_norm > 0.0 {
+                long_simple_norm
+            } else {
+                fb_s
+            },
+            long_complex_norm: if long_complex_norm > 0.0 {
+                long_complex_norm
+            } else {
+                fb_c
+            },
             weight: 0.35,
         });
 
@@ -1497,20 +1595,20 @@ impl HierarchicalResolver {
         //   long_word=0.12, init_cap=0.12, max_wl=0.25, punct=0.1, octile5=-0.15, octile3=-0.15
         let per_dim_penalties: Vec<(usize, f32, f32)> = vec![
             // G4 penalties
-            (102, -0.05, 4.0),  // TTR (bonus for high TTR)
-            (104,  0.10, 4.0),  // dep_depth
-            (111,  0.10, 4.0),  // rare_ratio
-            (112,  0.10, 4.0),  // clause_proxy
-            (113,  0.20, 4.0),  // academic_ratio
-            (114,  0.30, 4.0),  // polysyllabic_ratio
-            (115,  0.10, 4.0),  // char_entropy
+            (102, -0.05, 4.0), // TTR (bonus for high TTR)
+            (104, 0.10, 4.0),  // dep_depth
+            (111, 0.10, 4.0),  // rare_ratio
+            (112, 0.10, 4.0),  // clause_proxy
+            (113, 0.20, 4.0),  // academic_ratio
+            (114, 0.30, 4.0),  // polysyllabic_ratio
+            (115, 0.10, 4.0),  // char_entropy
             // G2 penalties
-            (49,   0.12, 3.0),  // long_word_ratio
-            (51,   0.12, 3.0),  // init_cap
-            (37,   0.25, 3.0),  // max_wl
-            (39,   0.10, 3.0),  // punct
-            (31,  -0.15, 3.0),  // octile5 (bonus)
-            (29,  -0.15, 3.0),  // octile3 (bonus)
+            (49, 0.12, 3.0),  // long_word_ratio
+            (51, 0.12, 3.0),  // init_cap
+            (37, 0.25, 3.0),  // max_wl
+            (39, 0.10, 3.0),  // punct
+            (31, -0.15, 3.0), // octile5 (bonus)
+            (29, -0.15, 3.0), // octile3 (bonus)
         ];
 
         // Apply to graph nodes (Surface tier only)
@@ -1546,9 +1644,12 @@ impl HierarchicalResolver {
         self.g5_simple_mean_norm = g5_simple_norm;
         self.g5_complex_mean_norm = g5_complex_norm;
         self.g5_bucket_norms = (
-            short_simple_norm, short_complex_norm,
-            med_simple_norm, med_complex_norm,
-            long_simple_norm, long_complex_norm,
+            short_simple_norm,
+            short_complex_norm,
+            med_simple_norm,
+            med_complex_norm,
+            long_simple_norm,
+            long_complex_norm,
         );
 
         (dir_norm, simple_norm, complex_norm, cosine_sim)
@@ -1560,7 +1661,9 @@ impl HierarchicalResolver {
         let data = &tensor.data;
         let s = G5_OFFSET.min(data.len());
         let e = (G5_OFFSET + G5_DIM).min(data.len());
-        if s >= e { return 0.0; }
+        if s >= e {
+            return 0.0;
+        }
         data[s..e].iter().map(|x| x * x).sum::<f32>().sqrt()
     }
 
@@ -1701,7 +1804,13 @@ impl HierarchicalResolver {
             // Fallback: use global norms in all buckets
             let g5_simple = self.g5_simple_mean_norm;
             let g5_complex = self.g5_complex_mean_norm;
-            let params = Some((crate::input::encoder::G5_OFFSET, g5_end, g5_simple, g5_complex, weight));
+            let params = Some((
+                crate::input::encoder::G5_OFFSET,
+                g5_end,
+                g5_simple,
+                g5_complex,
+                weight,
+            ));
             for node in self.graph.nodes_mut() {
                 if node.tier() == Tier::Surface {
                     node.set_g5_magnitude_penalty(params);
@@ -1717,7 +1826,10 @@ impl HierarchicalResolver {
     }
 
     /// Set length-bucketed G5 penalty on all Surface nodes.
-    pub fn set_g5_bucketed_penalty_all(&mut self, penalty: Option<crate::graph::node::G5BucketedPenalty>) {
+    pub fn set_g5_bucketed_penalty_all(
+        &mut self,
+        penalty: Option<crate::graph::node::G5BucketedPenalty>,
+    ) {
         for node in self.graph.nodes_mut() {
             if node.tier() == Tier::Surface {
                 node.set_g5_bucketed_penalty(penalty);
@@ -1835,19 +1947,31 @@ impl HierarchicalResolver {
         let mut basis_idx = 0usize;
         for node in self.graph.nodes_mut() {
             if node.tier() != Tier::Surface {
-                node.init_orthogonal(&orth.basis_vectors[basis_idx], orth.noise_scale, 3000 + basis_idx as u64);
+                node.init_orthogonal(
+                    &orth.basis_vectors[basis_idx],
+                    orth.noise_scale,
+                    3000 + basis_idx as u64,
+                );
                 basis_idx += 1;
             }
         }
 
         // Apply to standalone reasoning nodes
         for (i, node) in self.reasoning_nodes.iter_mut().enumerate() {
-            node.init_orthogonal(&orth.basis_vectors[graph_rd_count + i], orth.noise_scale, 4000 + i as u64);
+            node.init_orthogonal(
+                &orth.basis_vectors[graph_rd_count + i],
+                orth.noise_scale,
+                4000 + i as u64,
+            );
         }
 
         // Apply to standalone deep nodes
         for (i, node) in self.deep_nodes.iter_mut().enumerate() {
-            node.init_orthogonal(&orth.basis_vectors[graph_rd_count + reasoning_count + i], orth.noise_scale, 5000 + i as u64);
+            node.init_orthogonal(
+                &orth.basis_vectors[graph_rd_count + reasoning_count + i],
+                orth.noise_scale,
+                5000 + i as u64,
+            );
         }
 
         // Compute and log pairwise cosine similarities
@@ -1871,10 +1995,19 @@ impl HierarchicalResolver {
         let mut max_cos = 0.0f32;
         for i in 0..n {
             for j in (i + 1)..n {
-                let dot: f32 = directions[i].1.iter().zip(directions[j].1.iter()).map(|(a, b)| a * b).sum();
+                let dot: f32 = directions[i]
+                    .1
+                    .iter()
+                    .zip(directions[j].1.iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
                 let ni: f32 = directions[i].1.iter().map(|x| x * x).sum::<f32>().sqrt();
                 let nj: f32 = directions[j].1.iter().map(|x| x * x).sum::<f32>().sqrt();
-                let cos = if ni > 1e-8 && nj > 1e-8 { (dot / (ni * nj)).abs() } else { 0.0 };
+                let cos = if ni > 1e-8 && nj > 1e-8 {
+                    (dot / (ni * nj)).abs()
+                } else {
+                    0.0
+                };
                 sum_cos += cos;
                 pair_count += 1;
                 if cos > max_cos {
@@ -1883,7 +2016,11 @@ impl HierarchicalResolver {
             }
         }
 
-        let mean_cos = if pair_count > 0 { sum_cos / pair_count as f32 } else { 0.0 };
+        let mean_cos = if pair_count > 0 {
+            sum_cos / pair_count as f32
+        } else {
+            0.0
+        };
         eprintln!(
             "Orthogonal init: {} R+D nodes, {} dims, mean pairwise |cos| = {:.4}, max |cos| = {:.4}",
             n, input_dim, mean_cos, max_cos
@@ -1909,7 +2046,11 @@ impl HierarchicalResolver {
         for (i, name) in surface_graph_names.iter().enumerate() {
             let base_conf = 0.88 + (i as f32 * 0.005).min(0.03);
             graph.add_node(Box::new(LinearNode::new(
-                name.clone(), input_dim, mid_dim, Tier::Surface, base_conf,
+                name.clone(),
+                input_dim,
+                mid_dim,
+                Tier::Surface,
+                base_conf,
             )));
         }
 
@@ -1917,7 +2058,11 @@ impl HierarchicalResolver {
         let reasoning_graph_names = Self::reasoning_graph_node_names();
         for name in &reasoning_graph_names {
             graph.add_node(Box::new(LinearNode::new(
-                name.clone(), input_dim, mid_dim, Tier::Reasoning, 0.80,
+                name.clone(),
+                input_dim,
+                mid_dim,
+                Tier::Reasoning,
+                0.80,
             )));
         }
 
@@ -1925,7 +2070,11 @@ impl HierarchicalResolver {
         let deep_graph_names = Self::deep_graph_node_names();
         for name in &deep_graph_names {
             graph.add_node(Box::new(LinearNode::new(
-                name.clone(), input_dim, mid_dim, Tier::Deep, 0.75,
+                name.clone(),
+                input_dim,
+                mid_dim,
+                Tier::Deep,
+                0.75,
             )));
         }
 
@@ -1962,17 +2111,29 @@ impl HierarchicalResolver {
         for i in 0..20 {
             let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
             resolver.add_tier_node(Box::new(LinearNode::new(
-                format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+                format!("surface_standalone_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Surface,
+                base_conf,
             )));
         }
         for i in 0..16 {
             resolver.add_tier_node(Box::new(LinearNode::new(
-                format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning, 0.72,
+                format!("reasoning_standalone_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Reasoning,
+                0.72,
             )));
         }
         for i in 0..8 {
             resolver.add_tier_node(Box::new(LinearNode::new(
-                format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
+                format!("deep_standalone_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Deep,
+                0.78,
             )));
         }
 
@@ -1980,11 +2141,15 @@ impl HierarchicalResolver {
         for i in 0..15 {
             let base_conf = 0.88 + (i as f32 * 0.002).min(0.03);
             resolver.add_lateral_node(Box::new(LinearNode::new(
-                format!("surface_lateral_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+                format!("surface_lateral_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Surface,
+                base_conf,
             )));
             resolver.add_lateral_edge(LateralEdge::if_confidence_below(
                 "surface_entry",
-                &format!("surface_lateral_{}", i),
+                format!("surface_lateral_{}", i),
                 0.75,
                 1.0,
             ));
@@ -2011,7 +2176,11 @@ impl HierarchicalResolver {
     }
 
     /// Build a resolver from an explicit AxiomConfig with a custom mid_dim (output dimension per node).
-    pub fn build_with_axiom_config_mid_dim(input_dim: usize, config: &AxiomConfig, mid_dim: usize) -> Self {
+    pub fn build_with_axiom_config_mid_dim(
+        input_dim: usize,
+        config: &AxiomConfig,
+        mid_dim: usize,
+    ) -> Self {
         use crate::graph::edge::ConditionalEdge;
 
         // ── Graph: 8 Surface + 4 Reasoning + 2 Deep = 14 nodes ──
@@ -2022,7 +2191,11 @@ impl HierarchicalResolver {
         for (i, name) in surface_graph_names.iter().enumerate() {
             let base_conf = 0.88 + (i as f32 * 0.005).min(0.03);
             graph.add_node(Box::new(LinearNode::new(
-                name.clone(), input_dim, mid_dim, Tier::Surface, base_conf,
+                name.clone(),
+                input_dim,
+                mid_dim,
+                Tier::Surface,
+                base_conf,
             )));
         }
 
@@ -2030,7 +2203,11 @@ impl HierarchicalResolver {
         let reasoning_graph_names = Self::reasoning_graph_node_names();
         for name in &reasoning_graph_names {
             graph.add_node(Box::new(LinearNode::new(
-                name.clone(), input_dim, mid_dim, Tier::Reasoning, 0.80,
+                name.clone(),
+                input_dim,
+                mid_dim,
+                Tier::Reasoning,
+                0.80,
             )));
         }
 
@@ -2038,7 +2215,11 @@ impl HierarchicalResolver {
         let deep_graph_names = Self::deep_graph_node_names();
         for name in &deep_graph_names {
             graph.add_node(Box::new(LinearNode::new(
-                name.clone(), input_dim, mid_dim, Tier::Deep, 0.75,
+                name.clone(),
+                input_dim,
+                mid_dim,
+                Tier::Deep,
+                0.75,
             )));
         }
 
@@ -2078,18 +2259,29 @@ impl HierarchicalResolver {
         for i in 0..20 {
             let base_conf = 0.89 + (i as f32 * 0.0015).min(0.03);
             resolver.add_tier_node(Box::new(LinearNode::new(
-                format!("surface_standalone_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+                format!("surface_standalone_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Surface,
+                base_conf,
             )));
         }
         for i in 0..16 {
             resolver.add_tier_node(Box::new(LinearNode::new(
-                format!("reasoning_standalone_{}", i), input_dim, mid_dim, Tier::Reasoning,
+                format!("reasoning_standalone_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Reasoning,
                 config.reasoning_base_confidence,
             )));
         }
         for i in 0..8 {
             resolver.add_tier_node(Box::new(LinearNode::new(
-                format!("deep_standalone_{}", i), input_dim, mid_dim, Tier::Deep, 0.78,
+                format!("deep_standalone_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Deep,
+                0.78,
             )));
         }
 
@@ -2097,11 +2289,15 @@ impl HierarchicalResolver {
         for i in 0..15 {
             let base_conf = 0.88 + (i as f32 * 0.002).min(0.03);
             resolver.add_lateral_node(Box::new(LinearNode::new(
-                format!("surface_lateral_{}", i), input_dim, mid_dim, Tier::Surface, base_conf,
+                format!("surface_lateral_{}", i),
+                input_dim,
+                mid_dim,
+                Tier::Surface,
+                base_conf,
             )));
             resolver.add_lateral_edge(LateralEdge::if_confidence_below(
                 "surface_entry",
-                &format!("surface_lateral_{}", i),
+                format!("surface_lateral_{}", i),
                 0.75,
                 1.0,
             ));
@@ -2171,8 +2367,8 @@ impl HierarchicalResolver {
         per_input_max_surface.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         if !surface_confs.is_empty() {
-            let idx = ((surface_confs.len() as f32 * surface_pct) as usize)
-                .min(surface_confs.len() - 1);
+            let idx =
+                ((surface_confs.len() as f32 * surface_pct) as usize).min(surface_confs.len() - 1);
             let mut threshold = surface_confs[idx];
 
             let max_surface = *surface_confs.last().unwrap();
@@ -2215,8 +2411,11 @@ impl HierarchicalResolver {
                 eprintln!(
                     "  Calibration: enforced min escalation rate — raised threshold {:.4} → {:.4} \
                      ({}→{} of {} inputs escalate, {:.0}%→{:.0}%)",
-                    old_threshold, threshold,
-                    escalating_before, escalating_check, n_inputs,
+                    old_threshold,
+                    threshold,
+                    escalating_before,
+                    escalating_check,
+                    n_inputs,
                     escalating_before as f32 / n_inputs as f32 * 100.0,
                     escalating_check as f32 / n_inputs as f32 * 100.0,
                 );
@@ -2370,7 +2569,8 @@ impl HierarchicalResolver {
 
         // Surface chain (always)
         for pair in surface_names.windows(2) {
-            self.graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+            self.graph
+                .add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
         }
         // Surface → Reasoning (confidence-gated)
         self.graph.add_edge(ConditionalEdge::if_confidence_below(
@@ -2380,7 +2580,8 @@ impl HierarchicalResolver {
         ));
         // Reasoning chain (always)
         for pair in reasoning_names.windows(2) {
-            self.graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+            self.graph
+                .add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
         }
         // Reasoning → Deep (confidence-gated)
         self.graph.add_edge(ConditionalEdge::if_confidence_below(
@@ -2390,7 +2591,8 @@ impl HierarchicalResolver {
         ));
         // Deep chain (always)
         for pair in deep_names.windows(2) {
-            self.graph.add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
+            self.graph
+                .add_edge(ConditionalEdge::always(&pair[0], &pair[1]));
         }
     }
 
@@ -2401,9 +2603,21 @@ impl HierarchicalResolver {
     /// Panics if any node's ceiling cannot exceed its tier's threshold.
     pub fn validate_confidence_invariants(&self) {
         let checks: Vec<(&str, &[Box<dyn ComputeNode>], f32)> = vec![
-            ("surface", &self.surface_nodes, self.config.surface_confidence_threshold),
-            ("lateral", &self.lateral_nodes, self.config.surface_confidence_threshold),
-            ("reasoning", &self.reasoning_nodes, self.config.reasoning_confidence_threshold),
+            (
+                "surface",
+                &self.surface_nodes,
+                self.config.surface_confidence_threshold,
+            ),
+            (
+                "lateral",
+                &self.lateral_nodes,
+                self.config.surface_confidence_threshold,
+            ),
+            (
+                "reasoning",
+                &self.reasoning_nodes,
+                self.config.reasoning_confidence_threshold,
+            ),
         ];
 
         for (label, nodes, threshold) in checks {
@@ -2414,7 +2628,12 @@ impl HierarchicalResolver {
                     ceiling > threshold,
                     "Confidence invariant violated: {} node '{}' has ceiling {:.3} \
                      (base_confidence {:.3}) which cannot reach {} threshold {:.3}",
-                    label, node.node_id(), ceiling, base, label, threshold
+                    label,
+                    node.node_id(),
+                    ceiling,
+                    base,
+                    label,
+                    threshold
                 );
             }
         }
@@ -2431,7 +2650,9 @@ impl HierarchicalResolver {
 
     /// Reasoning graph node names (4 nodes).
     fn reasoning_graph_node_names() -> Vec<String> {
-        (0..4).map(|i| format!("reasoning_analyze_{}", (b'a' + i as u8) as char)).collect()
+        (0..4)
+            .map(|i| format!("reasoning_analyze_{}", (b'a' + i as u8) as char))
+            .collect()
     }
 
     /// Deep graph node names (2 nodes).
@@ -2488,20 +2709,28 @@ impl HierarchicalResolver {
         for node in self.graph.nodes_ref() {
             if node.tier() != Tier::Surface {
                 let d = node.weight_direction();
-                if !d.is_empty() { directions.push(d); }
+                if !d.is_empty() {
+                    directions.push(d);
+                }
             }
         }
         for node in &self.reasoning_nodes {
             let d = node.weight_direction();
-            if !d.is_empty() { directions.push(d); }
+            if !d.is_empty() {
+                directions.push(d);
+            }
         }
         for node in &self.deep_nodes {
             let d = node.weight_direction();
-            if !d.is_empty() { directions.push(d); }
+            if !d.is_empty() {
+                directions.push(d);
+            }
         }
 
         let n = directions.len();
-        if n < 2 { return (0.0, 0.0); }
+        if n < 2 {
+            return (0.0, 0.0);
+        }
 
         let mut sum_cos = 0.0f32;
         let mut max_cos = 0.0f32;
@@ -2509,15 +2738,29 @@ impl HierarchicalResolver {
         for i in 0..n {
             let ni: f32 = directions[i].iter().map(|x| x * x).sum::<f32>().sqrt();
             for j in (i + 1)..n {
-                let dot: f32 = directions[i].iter().zip(directions[j].iter()).map(|(a, b)| a * b).sum();
+                let dot: f32 = directions[i]
+                    .iter()
+                    .zip(directions[j].iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
                 let nj: f32 = directions[j].iter().map(|x| x * x).sum::<f32>().sqrt();
-                let cos = if ni > 1e-8 && nj > 1e-8 { (dot / (ni * nj)).abs() } else { 0.0 };
+                let cos = if ni > 1e-8 && nj > 1e-8 {
+                    (dot / (ni * nj)).abs()
+                } else {
+                    0.0
+                };
                 sum_cos += cos;
-                if cos > max_cos { max_cos = cos; }
+                if cos > max_cos {
+                    max_cos = cos;
+                }
                 pair_count += 1;
             }
         }
-        let mean = if pair_count > 0 { sum_cos / pair_count as f32 } else { 0.0 };
+        let mean = if pair_count > 0 {
+            sum_cos / pair_count as f32
+        } else {
+            0.0
+        };
         (mean, max_cos)
     }
 
@@ -2527,22 +2770,34 @@ impl HierarchicalResolver {
         let mut counts = Vec::new();
         for node in self.graph.nodes_ref() {
             if node.tier() != Tier::Surface {
-                counts.push((node.node_id().to_string(), node.tier(), node.activation_count()));
+                counts.push((
+                    node.node_id().to_string(),
+                    node.tier(),
+                    node.activation_count(),
+                ));
             }
         }
         for node in &self.reasoning_nodes {
-            counts.push((node.node_id().to_string(), node.tier(), node.activation_count()));
+            counts.push((
+                node.node_id().to_string(),
+                node.tier(),
+                node.activation_count(),
+            ));
         }
         for node in &self.deep_nodes {
-            counts.push((node.node_id().to_string(), node.tier(), node.activation_count()));
+            counts.push((
+                node.node_id().to_string(),
+                node.tier(),
+                node.activation_count(),
+            ));
         }
         counts
     }
 
     /// Save accumulated coalition log to a JSON file.
     pub fn save_coalition_log(&self, path: &str) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(&self.coalition_log)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json =
+            serde_json::to_string_pretty(&self.coalition_log).map_err(std::io::Error::other)?;
         std::fs::write(path, json)
     }
 
@@ -2600,8 +2855,7 @@ impl HierarchicalResolver {
                 self.g5_bucket_norms.5,
             ],
         });
-        let json = serde_json::to_string(&wrapper)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json = serde_json::to_string(&wrapper).map_err(std::io::Error::other)?;
         std::fs::write(path, json)
     }
 
@@ -2612,12 +2866,11 @@ impl HierarchicalResolver {
         use crate::graph::node::NodeWeightsData;
 
         let data = std::fs::read_to_string(path)?;
-        let wrapper: serde_json::Value = serde_json::from_str(&data)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        let nodes: Vec<NodeWeightsData> = serde_json::from_value(
-            wrapper.get("nodes").cloned().unwrap_or_default(),
-        )
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let wrapper: serde_json::Value =
+            serde_json::from_str(&data).map_err(std::io::Error::other)?;
+        let nodes: Vec<NodeWeightsData> =
+            serde_json::from_value(wrapper.get("nodes").cloned().unwrap_or_default())
+                .map_err(std::io::Error::other)?;
 
         let weight_map: std::collections::HashMap<&str, &NodeWeightsData> =
             nodes.iter().map(|n| (n.id.as_str(), n)).collect();
@@ -2658,9 +2911,8 @@ impl HierarchicalResolver {
 
         // Load bucketed G5 norms (backward-compatible: absent key defaults to all zeros)
         if let Some(arr) = wrapper.get("g5_bucket_norms").and_then(|v| v.as_array()) {
-            let get = |i: usize| -> f32 {
-                arr.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32
-            };
+            let get =
+                |i: usize| -> f32 { arr.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32 };
             self.g5_bucket_norms = (get(0), get(1), get(2), get(3), get(4), get(5));
         }
 
@@ -2749,7 +3001,10 @@ mod tests {
             result.route.execution_trace
         );
         // Coalition should have formed
-        assert!(result.coalition.is_some(), "Coalition should form on escalation");
+        assert!(
+            result.coalition.is_some(),
+            "Coalition should form on escalation"
+        );
     }
 
     #[test]
@@ -2999,7 +3254,11 @@ mod tests {
         // Step 1: Resolve an input that stays at Surface (populates cache with Surface entry)
         let input1 = Tensor::from_vec(vec![1.0, 0.5, 0.3, 0.1]);
         let result1 = resolver.resolve(&input1);
-        assert_eq!(result1.tier_reached, Tier::Surface, "First input should stay at Surface");
+        assert_eq!(
+            result1.tier_reached,
+            Tier::Surface,
+            "First input should stay at Surface"
+        );
 
         // Step 2: Force escalation on a similar input by lowering thresholds
         // to make Surface barely miss, causing escalation to Reasoning/Deep
@@ -3056,10 +3315,7 @@ mod tests {
 
         // Cache reinforcement should fire if producer was tracked
         if result2.cache_producer_id.is_some() {
-            assert!(
-                !events.is_empty(),
-                "Expected cache reinforcement events"
-            );
+            assert!(!events.is_empty(), "Expected cache reinforcement events");
             assert_eq!(events[0].event_type, "cache_reinforcement");
             // Weight change may be zero if the graph output went through many
             // ReLU layers and vanished — the event firing is the primary check.
@@ -3153,18 +3409,12 @@ mod tests {
         // Switch to Training mode — same input should NOT hit cache
         resolver.mode = RouteMode::Training;
         let r3 = resolver.resolve(&input);
-        assert!(
-            !r3.from_cache,
-            "Training mode should bypass cache entirely"
-        );
+        assert!(!r3.from_cache, "Training mode should bypass cache entirely");
 
         // Switch back to Inference — cache hit again
         resolver.mode = RouteMode::Inference;
         let r4 = resolver.resolve(&input);
-        assert!(
-            r4.from_cache,
-            "Inference mode should use cache"
-        );
+        assert!(r4.from_cache, "Inference mode should use cache");
     }
 
     #[test]
@@ -3176,7 +3426,11 @@ mod tests {
 
         // Resolve in Training mode — should NOT populate cache
         resolver.resolve(&input);
-        assert_eq!(resolver.cache_size(), 0, "Training mode should not insert into cache");
+        assert_eq!(
+            resolver.cache_size(),
+            0,
+            "Training mode should not insert into cache"
+        );
 
         // Switch to Inference — should be a cache miss (nothing was inserted)
         resolver.mode = RouteMode::Inference;
@@ -3213,7 +3467,10 @@ mod tests {
             resolver.init_surface_analytical(&simple_tensors, &complex_tensors);
 
         // Direction should have non-zero norm before normalisation
-        assert!(dir_norm > 0.0, "Discrimination direction norm should be > 0");
+        assert!(
+            dir_norm > 0.0,
+            "Discrimination direction norm should be > 0"
+        );
         assert!(simple_norm > 0.0);
         assert!(complex_norm > 0.0);
         assert!(cosine_sim > 0.0 && cosine_sim < 1.0);
@@ -3237,7 +3494,8 @@ mod tests {
         assert!(
             (surface_norm_after - surface_norm_before).abs() < 1e-8,
             "Frozen Surface weight norm must not change: before={}, after={}",
-            surface_norm_before, surface_norm_after
+            surface_norm_before,
+            surface_norm_after
         );
     }
 
@@ -3292,9 +3550,19 @@ mod tests {
         let tokeniser = Tokeniser::default_tokeniser();
         let encoder = Encoder::new(128, tokeniser);
         let simple = ["the sky is blue", "it is raining", "she runs fast"];
-        let complex = ["consciousness remains profound", "the interplay drives dynamics", "dark matter constitutes"];
-        let simple_t: Vec<Tensor> = simple.iter().map(|s| encoder.encode_text_readonly(s)).collect();
-        let complex_t: Vec<Tensor> = complex.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let complex = [
+            "consciousness remains profound",
+            "the interplay drives dynamics",
+            "dark matter constitutes",
+        ];
+        let simple_t: Vec<Tensor> = simple
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
+        let complex_t: Vec<Tensor> = complex
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
 
         // Capture Surface weight norms before orthogonal init
@@ -3314,7 +3582,8 @@ mod tests {
         assert!(
             (surface_norm_before - surface_norm_after).abs() < 1e-4,
             "Surface weight norm changed: {:.4} → {:.4}",
-            surface_norm_before, surface_norm_after
+            surface_norm_before,
+            surface_norm_after
         );
 
         let mut idx = 0;
@@ -3322,7 +3591,8 @@ mod tests {
             if node.tier() == Tier::Surface {
                 let dir_after = node.weight_direction();
                 assert_eq!(
-                    dir_after, surface_directions_before[idx],
+                    dir_after,
+                    surface_directions_before[idx],
                     "Surface node '{}' weight direction changed after orthogonal init",
                     node.node_id()
                 );
@@ -3364,14 +3634,24 @@ mod tests {
         // All pairwise cosine similarities should be < 0.3
         for i in 0..directions.len() {
             for j in (i + 1)..directions.len() {
-                let dot: f32 = directions[i].iter().zip(directions[j].iter()).map(|(a, b)| a * b).sum();
+                let dot: f32 = directions[i]
+                    .iter()
+                    .zip(directions[j].iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
                 let ni: f32 = directions[i].iter().map(|x| x * x).sum::<f32>().sqrt();
                 let nj: f32 = directions[j].iter().map(|x| x * x).sum::<f32>().sqrt();
-                let cos = if ni > 1e-8 && nj > 1e-8 { (dot / (ni * nj)).abs() } else { 0.0 };
+                let cos = if ni > 1e-8 && nj > 1e-8 {
+                    (dot / (ni * nj)).abs()
+                } else {
+                    0.0
+                };
                 assert!(
                     cos < 0.3,
                     "R+D nodes {} and {} have |cos| = {:.4}, exceeds 0.3",
-                    i, j, cos
+                    i,
+                    j,
+                    cos
                 );
             }
         }
@@ -3390,12 +3670,21 @@ mod tests {
         let result = resolver.resolve(&input);
 
         // Coalition should have formed
-        assert!(result.coalition.is_some(), "Coalition should form on escalation");
+        assert!(
+            result.coalition.is_some(),
+            "Coalition should form on escalation"
+        );
         let coalition = result.coalition.unwrap();
-        assert!(!coalition.members.is_empty(), "Coalition should have members");
+        assert!(
+            !coalition.members.is_empty(),
+            "Coalition should have members"
+        );
         assert!(coalition.members.len() >= 2, "Coalition min size is 2");
         assert!(coalition.members.len() <= 4, "Coalition max size is 4");
-        assert!(!coalition.resolved_by.is_empty(), "Coalition must have a resolver");
+        assert!(
+            !coalition.resolved_by.is_empty(),
+            "Coalition must have a resolver"
+        );
     }
 
     #[test]
@@ -3428,9 +3717,17 @@ mod tests {
         let tokeniser = Tokeniser::default_tokeniser();
         let encoder = Encoder::new(128, tokeniser);
         let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs"]
-            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
-        let complex_t: Vec<Tensor> = ["consciousness remains profound", "interplay drives", "dark matter"]
-            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
+        let complex_t: Vec<Tensor> = [
+            "consciousness remains profound",
+            "interplay drives",
+            "dark matter",
+        ]
+        .iter()
+        .map(|s| encoder.encode_text_readonly(s))
+        .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.mode = RouteMode::Training;
 
@@ -3448,7 +3745,11 @@ mod tests {
         // Build a minimal resolver with specific nodes to test cross-tier blend
         let mut graph = SparseGraph::new("low_conf");
         graph.add_node(Box::new(LinearNode::new(
-            "low_conf", 4, 4, Tier::Surface, 0.3,
+            "low_conf",
+            4,
+            4,
+            Tier::Surface,
+            0.3,
         )));
 
         let cache = EmbeddingCache::new(256, 0.92);
@@ -3460,11 +3761,13 @@ mod tests {
 
         // Add R+D nodes with specific initialisation
         resolver.add_tier_node(Box::new(LinearNode::new(
-            "reasoning_a", 4, 4, Tier::Reasoning, 0.80,
+            "reasoning_a",
+            4,
+            4,
+            Tier::Reasoning,
+            0.80,
         )));
-        resolver.add_tier_node(Box::new(LinearNode::new(
-            "deep_a", 4, 4, Tier::Deep, 0.95,
-        )));
+        resolver.add_tier_node(Box::new(LinearNode::new("deep_a", 4, 4, Tier::Deep, 0.95)));
 
         let input = Tensor::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
         let result = resolver.resolve(&input);
@@ -3493,7 +3796,7 @@ mod tests {
         }
 
         assert!(
-            resolver.coalition_log().len() >= 1,
+            !resolver.coalition_log().is_empty(),
             "Coalition log should accumulate entries"
         );
     }
@@ -3508,9 +3811,17 @@ mod tests {
         let tokeniser = Tokeniser::default_tokeniser();
         let encoder = Encoder::new(128, tokeniser);
         let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs"]
-            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
-        let complex_t: Vec<Tensor> = ["consciousness remains profound", "interplay drives", "dark matter"]
-            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
+        let complex_t: Vec<Tensor> = [
+            "consciousness remains profound",
+            "interplay drives",
+            "dark matter",
+        ]
+        .iter()
+        .map(|s| encoder.encode_text_readonly(s))
+        .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.init_reasoning_deep_orthogonal();
         resolver.mode = RouteMode::Training;
@@ -3530,7 +3841,8 @@ mod tests {
         assert!(
             (surface_norm_before - surface_norm_after).abs() < 1e-4,
             "Surface weights changed during coalition: {:.4} → {:.4}",
-            surface_norm_before, surface_norm_after
+            surface_norm_before,
+            surface_norm_after
         );
     }
 
@@ -3598,13 +3910,24 @@ mod tests {
         let encoder = Encoder::new(128, tokeniser);
 
         // Analytical Surface init
-        let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs", "water flows", "he reads"]
-            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let simple_t: Vec<Tensor> = [
+            "the sky is blue",
+            "it rains",
+            "she runs",
+            "water flows",
+            "he reads",
+        ]
+        .iter()
+        .map(|s| encoder.encode_text_readonly(s))
+        .collect();
         let complex_t: Vec<Tensor> = [
             "consciousness determines measurement",
             "neural networks approximate functions",
             "interplay drives dynamics",
-        ].iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        ]
+        .iter()
+        .map(|s| encoder.encode_text_readonly(s))
+        .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.init_reasoning_deep_orthogonal();
         // Recalibrate AFTER analytical init so thresholds match current confidences
@@ -3632,7 +3955,12 @@ mod tests {
             eprintln!(
                 "Coalition sizing: {}/{} inputs escalated, mean coalition size = {:.1}, \
                  bid count range = [{}, {}], mean bids = {:.1}, threshold = {}",
-                n, sentences.len(), mean_size, min_bids, max_bids, mean_bids,
+                n,
+                sentences.len(),
+                mean_size,
+                min_bids,
+                max_bids,
+                mean_bids,
                 resolver.coalition_bid_threshold
             );
 
@@ -3640,34 +3968,50 @@ mod tests {
             let log = resolver.coalition_log();
             eprintln!("\n--- Sample coalition events (up to 5) ---");
             for (i, coal) in log.iter().take(5).enumerate() {
-                let member_desc: Vec<String> = coal.members.iter()
-                    .map(|m| format!("{}({:?}, bid={:.3}, conf={:.3})", m.node_id, m.tier, m.bid_score, m.confidence_out))
+                let member_desc: Vec<String> = coal
+                    .members
+                    .iter()
+                    .map(|m| {
+                        format!(
+                            "{}({:?}, bid={:.3}, conf={:.3})",
+                            m.node_id, m.tier, m.bid_score, m.confidence_out
+                        )
+                    })
                     .collect();
                 eprintln!(
                     "  [{}] resolved_by={} ({:?}), coalition=[{}], cross_tier={}, bids={}",
-                    i + 1, coal.resolved_by, coal.resolved_tier,
-                    member_desc.join(", "), coal.cross_tier_fired, coal.bid_count
+                    i + 1,
+                    coal.resolved_by,
+                    coal.resolved_tier,
+                    member_desc.join(", "),
+                    coal.cross_tier_fired,
+                    coal.bid_count
                 );
             }
 
             // Check for diversity: count unique resolver nodes
-            let mut resolver_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut resolver_set: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             for coal in log {
                 resolver_set.insert(coal.resolved_by.clone());
             }
             eprintln!(
                 "\nUnique resolver nodes: {}/{} coalitions",
-                resolver_set.len(), log.len()
+                resolver_set.len(),
+                log.len()
             );
 
             // Target: mean coalition size between 1.5 and 4.0 (max_coalition_size=4)
             assert!(
-                mean_size >= 1.5 && mean_size <= 4.0,
+                (1.5..=4.0).contains(&mean_size),
                 "Mean coalition size {:.1} outside acceptable range [1.5, 4.0]",
                 mean_size
             );
         } else {
-            eprintln!("Coalition sizing: 0/{} inputs escalated — all stayed Surface", sentences.len());
+            eprintln!(
+                "Coalition sizing: 0/{} inputs escalated — all stayed Surface",
+                sentences.len()
+            );
         }
     }
 
@@ -3683,11 +4027,16 @@ mod tests {
         let encoder = Encoder::new(128, tokeniser);
 
         let simple_t: Vec<Tensor> = ["the sky is blue", "it rains", "she runs"]
-            .iter().map(|s| encoder.encode_text_readonly(s)).collect();
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
         let complex_t: Vec<Tensor> = [
             "consciousness determines measurement",
             "neural networks approximate functions",
-        ].iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        ]
+        .iter()
+        .map(|s| encoder.encode_text_readonly(s))
+        .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.init_reasoning_deep_orthogonal();
         resolver.calibrate(128, 0.65, 0.35);
@@ -3697,18 +4046,17 @@ mod tests {
         resolver.config.surface_confidence_threshold = 0.99;
 
         let input = encoder.encode_text_readonly(
-            "the recursive nature of self-referential systems creates emergent properties"
+            "the recursive nature of self-referential systems creates emergent properties",
         );
 
-        let mut member_sets: std::collections::HashSet<Vec<String>> = std::collections::HashSet::new();
+        let mut member_sets: std::collections::HashSet<Vec<String>> =
+            std::collections::HashSet::new();
         let mut all_node_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for _ in 0..100 {
             let result = resolver.resolve(&input);
             if let Some(coal) = &result.coalition {
-                let mut ids: Vec<String> = coal.members.iter()
-                    .map(|m| m.node_id.clone())
-                    .collect();
+                let mut ids: Vec<String> = coal.members.iter().map(|m| m.node_id.clone()).collect();
                 ids.sort();
                 for id in &ids {
                     all_node_ids.insert(id.clone());
@@ -3748,7 +4096,11 @@ mod tests {
         let mut resolver = HierarchicalResolver::build_with_axiom_config(128, &config);
         let mut tokeniser = Tokeniser::default_tokeniser();
 
-        let simple = ["the cat sat on the mat", "the dog runs fast", "birds fly south"];
+        let simple = [
+            "the cat sat on the mat",
+            "the dog runs fast",
+            "birds fly south",
+        ];
         let complex = [
             "the recursive nature of self-referential systems creates emergent properties",
             "quantum entanglement challenges classical notions of locality and causality",
@@ -3758,15 +4110,21 @@ mod tests {
         }
         let encoder = Encoder::new(128, tokeniser);
 
-        let simple_t: Vec<Tensor> = simple.iter().map(|s| encoder.encode_text_readonly(s)).collect();
-        let complex_t: Vec<Tensor> = complex.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let simple_t: Vec<Tensor> = simple
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
+        let complex_t: Vec<Tensor> = complex
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.set_g5_penalty_weight(0.25);
 
         // Record confidences before save
         let simple_input = encoder.encode_text_readonly("the cat sat on the mat");
         let complex_input = encoder.encode_text_readonly(
-            "the recursive nature of self-referential systems creates emergent properties"
+            "the recursive nature of self-referential systems creates emergent properties",
         );
         let orig_simple_conf = resolver.max_surface_confidence(&simple_input);
         let orig_complex_conf = resolver.max_surface_confidence(&complex_input);
@@ -3787,21 +4145,32 @@ mod tests {
 
         std::fs::remove_file(path).ok();
 
-        eprintln!("G5 roundtrip: simple {:.6} → {:.6}, complex {:.6} → {:.6}",
-            orig_simple_conf, loaded_simple_conf,
-            orig_complex_conf, loaded_complex_conf);
+        eprintln!(
+            "G5 roundtrip: simple {:.6} → {:.6}, complex {:.6} → {:.6}",
+            orig_simple_conf, loaded_simple_conf, orig_complex_conf, loaded_complex_conf
+        );
 
         assert!(
             (orig_simple_conf - loaded_simple_conf).abs() < 1e-5,
-            "Simple conf mismatch: {:.6} vs {:.6}", orig_simple_conf, loaded_simple_conf
+            "Simple conf mismatch: {:.6} vs {:.6}",
+            orig_simple_conf,
+            loaded_simple_conf
         );
         assert!(
             (orig_complex_conf - loaded_complex_conf).abs() < 1e-5,
-            "Complex conf mismatch: {:.6} vs {:.6}", orig_complex_conf, loaded_complex_conf
+            "Complex conf mismatch: {:.6} vs {:.6}",
+            orig_complex_conf,
+            loaded_complex_conf
         );
         // G5 norms must be non-zero after load
-        assert!(resolver2.g5_simple_mean_norm > 0.0, "g5_simple_mean_norm not loaded");
-        assert!(resolver2.g5_complex_mean_norm > 0.0, "g5_complex_mean_norm not loaded");
+        assert!(
+            resolver2.g5_simple_mean_norm > 0.0,
+            "g5_simple_mean_norm not loaded"
+        );
+        assert!(
+            resolver2.g5_complex_mean_norm > 0.0,
+            "g5_complex_mean_norm not loaded"
+        );
     }
 
     #[test]
@@ -3834,8 +4203,14 @@ mod tests {
         let encoder = Encoder::new(128, tokeniser);
 
         // Analytical init so G5 features are meaningful
-        let simple_t: Vec<Tensor> = simple_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
-        let complex_t: Vec<Tensor> = complex_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let simple_t: Vec<Tensor> = simple_sents
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
+        let complex_t: Vec<Tensor> = complex_sents
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.mode = RouteMode::Training;
 
@@ -3853,7 +4228,8 @@ mod tests {
         assert!(
             simple_mean_g5 < complex_mean_g5,
             "Expected simple mean G5 ({:.4}) < complex mean G5 ({:.4})",
-            simple_mean_g5, complex_mean_g5
+            simple_mean_g5,
+            complex_mean_g5
         );
     }
 
@@ -3887,17 +4263,25 @@ mod tests {
         let encoder = Encoder::new(128, tokeniser);
 
         // Analytical init for meaningful Surface discrimination
-        let simple_t: Vec<Tensor> = simple_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
-        let complex_t: Vec<Tensor> = complex_sents.iter().map(|s| encoder.encode_text_readonly(s)).collect();
+        let simple_t: Vec<Tensor> = simple_sents
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
+        let complex_t: Vec<Tensor> = complex_sents
+            .iter()
+            .map(|s| encoder.encode_text_readonly(s))
+            .collect();
         resolver.init_surface_analytical(&simple_t, &complex_t);
         resolver.mode = RouteMode::Inference;
 
         // Set surface threshold to the midpoint between simple and complex
         // surface confidences so simple chunks pass and complex chunks don't.
-        let simple_confs: Vec<f32> = simple_sents.iter()
+        let simple_confs: Vec<f32> = simple_sents
+            .iter()
             .map(|s| resolver.max_surface_confidence(&encoder.encode_text_readonly(s)))
             .collect();
-        let complex_confs: Vec<f32> = complex_sents.iter()
+        let complex_confs: Vec<f32> = complex_sents
+            .iter()
             .map(|s| resolver.max_surface_confidence(&encoder.encode_text_readonly(s)))
             .collect();
         let simple_mean = simple_confs.iter().sum::<f32>() / simple_confs.len() as f32;

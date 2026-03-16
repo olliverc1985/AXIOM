@@ -42,10 +42,7 @@ impl Tokeniser {
     /// unknown tokens beyond that get ID 0 (mapped to zero vector by encoder).
     pub fn tokenise(&mut self, text: &str) -> Vec<usize> {
         let tokens = Self::split(text);
-        tokens
-            .into_iter()
-            .map(|t| self.get_or_insert(&t))
-            .collect()
+        tokens.into_iter().map(|t| self.get_or_insert(&t)).collect()
     }
 
     /// Tokenise without modifying vocabulary (read-only).
@@ -68,10 +65,8 @@ impl Tokeniser {
         for ch in lower.chars() {
             if ch.is_alphanumeric() || ch == '\'' {
                 current.push(ch);
-            } else {
-                if !current.is_empty() {
-                    tokens.push(std::mem::take(&mut current));
-                }
+            } else if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
             }
         }
         if !current.is_empty() {
@@ -101,16 +96,15 @@ impl Tokeniser {
 
     /// Save vocabulary to JSON file.
     pub fn save_vocab(&self, path: &str) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(&self.vocab)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json = serde_json::to_string_pretty(&self.vocab).map_err(std::io::Error::other)?;
         std::fs::write(path, json)
     }
 
     /// Load vocabulary from JSON file.
     pub fn load_vocab(&mut self, path: &str) -> std::io::Result<()> {
         let data = std::fs::read_to_string(path)?;
-        let vocab: HashMap<String, usize> = serde_json::from_str(&data)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let vocab: HashMap<String, usize> =
+            serde_json::from_str(&data).map_err(std::io::Error::other)?;
         // Rebuild id_to_token from vocab
         let max_id = vocab.values().copied().max().unwrap_or(0);
         let mut id_to_token = vec![String::new(); max_id + 1];

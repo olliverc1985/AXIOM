@@ -91,7 +91,13 @@ impl EmbeddingCache {
     }
 
     /// Insert a new entry, evicting the LRU entry if at capacity.
-    fn insert(&mut self, key: Tensor, value: Tensor, producer_node_id: Option<String>, resolved_tier: Option<Tier>) {
+    fn insert(
+        &mut self,
+        key: Tensor,
+        value: Tensor,
+        producer_node_id: Option<String>,
+        resolved_tier: Option<Tier>,
+    ) {
         if self.entries.len() >= self.max_entries {
             // Evict least recently used
             let lru_idx = self

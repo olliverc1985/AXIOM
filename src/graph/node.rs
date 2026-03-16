@@ -55,13 +55,7 @@ pub trait ComputeNode: Send + Sync {
     ///   when a high-similarity cache hit occurs.
     ///
     /// Default implementation is a no-op for nodes without trainable weights.
-    fn error_update(
-        &mut self,
-        _input: &Tensor,
-        _output: &Tensor,
-        _error_lr: f32,
-        _modulator: f32,
-    ) {
+    fn error_update(&mut self, _input: &Tensor, _output: &Tensor, _error_lr: f32, _modulator: f32) {
     }
     /// Total number of trainable parameters in this node.
     /// Default is 0 for nodes without trainable weights.
@@ -340,7 +334,6 @@ pub struct LinearNode {
     per_dim_penalty: Vec<(usize, f32, f32)>,
 }
 
-
 impl LinearNode {
     /// Create a new linear node with Xavier-initialised weights.
     pub fn new(
@@ -433,7 +426,10 @@ impl LinearNode {
     /// from `(node_id_hash XOR seed XOR row_index)` so each node and row gets
     /// unique noise while all point in the same general direction.
     pub fn init_analytical(&mut self, init: &AnalyticalInit, seed: u64) {
-        let id_hash: u64 = self.id.bytes().fold(5381u64, |h, b| h.wrapping_mul(33).wrapping_add(b as u64));
+        let id_hash: u64 = self
+            .id
+            .bytes()
+            .fold(5381u64, |h, b| h.wrapping_mul(33).wrapping_add(b as u64));
         let xavier_scale = 1.0 / (self.input_dim as f32).sqrt();
         let noise_scale = init.noise_scale * xavier_scale;
 
@@ -553,7 +549,11 @@ impl ComputeNode for LinearNode {
         // Cosine similarity between input and weight direction (magnitude-invariant)
         let weight_dir = self.weight_direction();
         let epsilon = 1e-8f32;
-        let dot: f32 = input_slice.iter().zip(weight_dir.iter()).map(|(a, b)| a * b).sum();
+        let dot: f32 = input_slice
+            .iter()
+            .zip(weight_dir.iter())
+            .map(|(a, b)| a * b)
+            .sum();
         let dir_norm: f32 = weight_dir.iter().map(|x| x * x).sum::<f32>().sqrt();
         let cosine_sim = if input_norm > epsilon && dir_norm > epsilon {
             (dot / (input_norm * dir_norm)).clamp(0.0, 1.0)
@@ -561,7 +561,8 @@ impl ComputeNode for LinearNode {
             0.5
         };
         let cbw = self.confidence_base_weight;
-        let mut confidence = (self.base_confidence * cbw + cosine_sim * (1.0 - cbw)).clamp(0.0, 1.0);
+        let mut confidence =
+            (self.base_confidence * cbw + cosine_sim * (1.0 - cbw)).clamp(0.0, 1.0);
 
         // G5 length-bucketed magnitude penalty: reduce Surface confidence for
         // inputs with high structural complexity (high G5 norm), using per-bucket
@@ -588,11 +589,7 @@ impl ComputeNode for LinearNode {
                 };
 
                 if complex_norm > simple_norm + epsilon {
-                    let g5_norm = input_slice[s..e]
-                        .iter()
-                        .map(|x| x * x)
-                        .sum::<f32>()
-                        .sqrt();
+                    let g5_norm = input_slice[s..e].iter().map(|x| x * x).sum::<f32>().sqrt();
                     let penalty =
                         ((g5_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
                     confidence = (confidence - penalty * bp.weight).clamp(0.0, 1.0);
@@ -607,11 +604,7 @@ impl ComputeNode for LinearNode {
             let s = g4_start.min(input_slice.len());
             let e = g4_end.min(input_slice.len());
             if s < e && complex_norm > simple_norm + epsilon {
-                let g4_norm = input_slice[s..e]
-                    .iter()
-                    .map(|x| x * x)
-                    .sum::<f32>()
-                    .sqrt();
+                let g4_norm = input_slice[s..e].iter().map(|x| x * x).sum::<f32>().sqrt();
                 let penalty =
                     ((g4_norm - simple_norm) / (complex_norm - simple_norm)).clamp(0.0, 1.0);
                 confidence = (confidence - penalty * weight).clamp(0.0, 1.0);
@@ -643,13 +636,7 @@ impl ComputeNode for LinearNode {
         self.node_tier
     }
 
-    fn hebbian_update(
-        &mut self,
-        input: &Tensor,
-        output: &Tensor,
-        signal: f32,
-        learning_rate: f32,
-    ) {
+    fn hebbian_update(&mut self, input: &Tensor, output: &Tensor, signal: f32, learning_rate: f32) {
         if self.frozen {
             return;
         }
@@ -683,13 +670,7 @@ impl ComputeNode for LinearNode {
         }
     }
 
-    fn error_update(
-        &mut self,
-        input: &Tensor,
-        output: &Tensor,
-        error_lr: f32,
-        modulator: f32,
-    ) {
+    fn error_update(&mut self, input: &Tensor, output: &Tensor, error_lr: f32, modulator: f32) {
         if self.frozen {
             return;
         }
@@ -700,8 +681,7 @@ impl ComputeNode for LinearNode {
             for j in 0..out_len {
                 let idx = i * self.output_dim + j;
                 if idx < self.weights.data.len() {
-                    self.weights.data[idx] +=
-                        error_lr * modulator * input.data[i] * output.data[j];
+                    self.weights.data[idx] += error_lr * modulator * input.data[i] * output.data[j];
                 }
             }
         }
@@ -888,7 +868,8 @@ impl ComputeNode for LinearNode {
     }
 
     fn load_weights_data(&mut self, data: &NodeWeightsData) {
-        if data.id == self.id && data.weights.len() == self.weights.data.len()
+        if data.id == self.id
+            && data.weights.len() == self.weights.data.len()
             && data.bias.len() == self.bias.data.len()
         {
             self.weights.data.clone_from(&data.weights);
@@ -927,7 +908,7 @@ impl ComputeNode for AggregateNode {
     fn forward(&self, input: &Tensor) -> NodeOutput {
         let n = input.data.len();
         let chunk_size = self.reduction_factor.max(1);
-        let out_len = (n + chunk_size - 1) / chunk_size;
+        let out_len = n.div_ceil(chunk_size);
         let mut output_data = Vec::with_capacity(out_len);
 
         for chunk in input.data.chunks(chunk_size) {
@@ -1008,7 +989,9 @@ mod tests {
             assert!(
                 (after - before - expected_delta).abs() < 1e-6,
                 "Oja delta mismatch: before={}, after={}, expected_delta={}",
-                before, after, expected_delta
+                before,
+                after,
+                expected_delta
             );
         }
     }
@@ -1026,7 +1009,9 @@ mod tests {
             assert!(
                 (after - before - expected_delta).abs() < 1e-6,
                 "Oja suppression delta mismatch: before={}, after={}, expected_delta={}",
-                before, after, expected_delta
+                before,
+                after,
+                expected_delta
             );
         }
     }
@@ -1046,7 +1031,8 @@ mod tests {
         assert!(
             final_norm < initial_norm * 10.0,
             "Oja norm should stay stable: initial={}, final={}",
-            initial_norm, final_norm
+            initial_norm,
+            final_norm
         );
     }
 
@@ -1175,10 +1161,22 @@ mod tests {
         // outer_product([1, 3], [1, 3]) = [[1, 3], [3, 9]]
         // w[0][0] += 1*1 = 1, w[0][1] += 1*3 = 3
         // w[1][0] += 3*1 = 3, w[1][1] += 3*3 = 9
-        assert!((node.weights.data[0] - (w_before[0] + 1.0)).abs() < 1e-6, "w[0][0]");
-        assert!((node.weights.data[1] - (w_before[1] + 3.0)).abs() < 1e-6, "w[0][1]");
-        assert!((node.weights.data[2] - (w_before[2] + 3.0)).abs() < 1e-6, "w[1][0]");
-        assert!((node.weights.data[3] - (w_before[3] + 9.0)).abs() < 1e-6, "w[1][1]");
+        assert!(
+            (node.weights.data[0] - (w_before[0] + 1.0)).abs() < 1e-6,
+            "w[0][0]"
+        );
+        assert!(
+            (node.weights.data[1] - (w_before[1] + 3.0)).abs() < 1e-6,
+            "w[0][1]"
+        );
+        assert!(
+            (node.weights.data[2] - (w_before[2] + 3.0)).abs() < 1e-6,
+            "w[1][0]"
+        );
+        assert!(
+            (node.weights.data[3] - (w_before[3] + 9.0)).abs() < 1e-6,
+            "w[1][1]"
+        );
     }
 
     #[test]
@@ -1234,7 +1232,10 @@ mod tests {
                 assert!(
                     (node.weights.data[idx] - direction[i]).abs() < 1e-6,
                     "Weight[{}][{}] should be {:.4}, got {:.4}",
-                    i, j, direction[i], node.weights.data[idx]
+                    i,
+                    j,
+                    direction[i],
+                    node.weights.data[idx]
                 );
             }
         }
@@ -1259,7 +1260,11 @@ mod tests {
                 assert!(
                     diff < 0.1,
                     "Weight[{}][{}] = {:.4}, direction = {:.4}, diff = {:.4}",
-                    i, j, node.weights.data[idx], direction[i], diff
+                    i,
+                    j,
+                    node.weights.data[idx],
+                    direction[i],
+                    diff
                 );
             }
         }
@@ -1273,7 +1278,10 @@ mod tests {
         let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
         let output = Tensor::from_vec(vec![1.0, 1.0]);
         node.hebbian_update(&input, &output, 1.0, 0.1);
-        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+        assert_eq!(
+            node.weights.data, w_before,
+            "Frozen node weights must not change"
+        );
     }
 
     #[test]
@@ -1284,7 +1292,10 @@ mod tests {
         let input = Tensor::from_vec(vec![1.0, 1.0, 1.0, 1.0]);
         let output = Tensor::from_vec(vec![1.0, 1.0]);
         node.error_update(&input, &output, 0.001, 0.5);
-        assert_eq!(node.weights.data, w_before, "Frozen node weights must not change");
+        assert_eq!(
+            node.weights.data, w_before,
+            "Frozen node weights must not change"
+        );
     }
 
     #[test]
@@ -1302,8 +1313,14 @@ mod tests {
         assert_eq!(node.positive_count, 1);
         assert_eq!(node.negative_count, 1);
         let info = node.apply_contrastive_update();
-        assert!(info.is_some(), "Frozen node should produce contrastive update");
-        assert_ne!(node.weights.data, w_before, "Frozen node weights should change via contrastive");
+        assert!(
+            info.is_some(),
+            "Frozen node should produce contrastive update"
+        );
+        assert_ne!(
+            node.weights.data, w_before,
+            "Frozen node weights should change via contrastive"
+        );
     }
 
     #[test]
@@ -1347,7 +1364,7 @@ mod tests {
     #[test]
     fn test_discrimination_direction_unit_normalised() {
         // Verify the direction passed to init_analytical should be unit normalised
-        let direction = vec![0.6, 0.0, -0.8, 0.0];
+        let direction = [0.6, 0.0, -0.8, 0.0];
         let norm: f32 = direction.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!(
             (norm - 1.0).abs() < 1e-6,
@@ -1368,7 +1385,8 @@ mod tests {
             assert!(
                 (norm - 1.0).abs() < 1e-5,
                 "Basis vector {} norm = {:.6}, expected 1.0",
-                i, norm
+                i,
+                norm
             );
         }
 
@@ -1388,7 +1406,9 @@ mod tests {
                 assert!(
                     cos < 0.3,
                     "Pairwise |cos| between {} and {} = {:.4}, exceeds 0.3",
-                    i, j, cos
+                    i,
+                    j,
+                    cos
                 );
             }
         }
@@ -1416,7 +1436,10 @@ mod tests {
                 assert!(
                     (node.weights.data[idx] - basis[i]).abs() < 1e-6,
                     "Weight[{}][{}] = {:.6}, expected {:.6}",
-                    i, j, node.weights.data[idx], basis[i]
+                    i,
+                    j,
+                    node.weights.data[idx],
+                    basis[i]
                 );
             }
         }
@@ -1436,7 +1459,11 @@ mod tests {
                 assert!(
                     diff < 0.1,
                     "Weight[{}][{}] = {:.6}, basis = {:.6}, diff = {:.6} exceeds 0.1",
-                    i, j, node.weights.data[idx], basis[i], diff
+                    i,
+                    j,
+                    node.weights.data[idx],
+                    basis[i],
+                    diff
                 );
             }
         }
@@ -1447,7 +1474,10 @@ mod tests {
         let node = LinearNode::new("wd_trait", 4, 2, Tier::Reasoning, 0.80);
         let dir_inherent = LinearNode::weight_direction(&node);
         let dir_trait: Vec<f32> = ComputeNode::weight_direction(&node);
-        assert_eq!(dir_inherent, dir_trait, "Trait and inherent weight_direction must match");
+        assert_eq!(
+            dir_inherent, dir_trait,
+            "Trait and inherent weight_direction must match"
+        );
         assert_eq!(dir_trait.len(), 4);
     }
 }

@@ -51,8 +51,7 @@ const MAX_DEP_DEPTH: f32 = 10.0;
 
 /// Function words for density calculation (Group 2).
 const FUNCTION_WORDS: &[&str] = &[
-    "the", "a", "an", "is", "are", "was", "were", "in", "on", "at", "to", "of", "and", "or",
-    "but",
+    "the", "a", "an", "is", "are", "was", "were", "in", "on", "at", "to", "of", "and", "or", "but",
 ];
 
 /// Question words for binary presence feature.
@@ -93,8 +92,8 @@ const G5_FUNCTION_WORDS: &[&str] = &[
     "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "shall",
     "can", "of", "in", "on", "at", "to", "for", "with", "by", "from", "as", "or", "and", "but",
     "nor", "so", "yet", "not", "no", "it", "its", "this", "that", "these", "those", "there",
-    "here", "very", "just", "also", "only", "even", "both", "either", "each", "all", "any",
-    "some", "few", "more", "most",
+    "here", "very", "just", "also", "only", "even", "both", "either", "each", "all", "any", "some",
+    "few", "more", "most",
 ];
 
 /// Prepositions for G5 prepositional phrase depth tracking.
@@ -233,7 +232,7 @@ impl Encoder {
         let word_lengths: Vec<f32> = words.iter().map(|w| w.len() as f32).collect();
 
         // Dims 0–7: Average word length in each of 8 sentence octiles
-        let octile_size = (n + 7) / 8;
+        let octile_size = n.div_ceil(8);
         for q in 0..8 {
             let start = q * octile_size;
             let end = ((q + 1) * octile_size).min(n);
@@ -245,8 +244,11 @@ impl Encoder {
 
         // Dim 8: Word length variance (normalised by MAX_TOKEN_LEN^2)
         let mean_len: f32 = word_lengths.iter().sum::<f32>() / n as f32;
-        let variance: f32 =
-            word_lengths.iter().map(|l| (l - mean_len).powi(2)).sum::<f32>() / n as f32;
+        let variance: f32 = word_lengths
+            .iter()
+            .map(|l| (l - mean_len).powi(2))
+            .sum::<f32>()
+            / n as f32;
         features[8] = variance / (MAX_TOKEN_LEN * MAX_TOKEN_LEN);
 
         // Dim 9: Unique word ratio
@@ -269,7 +271,10 @@ impl Encoder {
         features[12] = (n as f32 / MAX_SENTENCE_LEN).min(1.0);
 
         // Dim 13: Punctuation count normalised by word count
-        let punct_count = raw_text.chars().filter(|c| c.is_ascii_punctuation()).count();
+        let punct_count = raw_text
+            .chars()
+            .filter(|c| c.is_ascii_punctuation())
+            .count();
         features[13] = (punct_count as f32 / n as f32).min(1.0);
 
         // Dim 14: Capitalisation count normalised by word count (from raw text)
@@ -277,10 +282,7 @@ impl Encoder {
         features[14] = (cap_count as f32 / n as f32).min(1.0);
 
         // Dim 15: Question word presence (binary)
-        features[15] = if words
-            .iter()
-            .any(|w| QUESTION_WORDS.contains(&w.as_str()))
-        {
+        features[15] = if words.iter().any(|w| QUESTION_WORDS.contains(&w.as_str())) {
             1.0
         } else {
             0.0
@@ -312,7 +314,10 @@ impl Encoder {
         };
 
         // Dim 20: Parenthetical/bracket presence (binary)
-        features[20] = if raw_text.chars().any(|c| c == '(' || c == ')' || c == '[' || c == ']') {
+        features[20] = if raw_text
+            .chars()
+            .any(|c| c == '(' || c == ')' || c == '[' || c == ']')
+        {
             1.0
         } else {
             0.0
@@ -334,7 +339,7 @@ impl Encoder {
         features[24] = ((max_len - min_len) / MAX_TOKEN_LEN).min(1.0);
 
         // Dim 25: Sentence-initial capital (binary)
-        features[25] = if raw_text.chars().next().map_or(false, |c| c.is_uppercase()) {
+        features[25] = if raw_text.chars().next().is_some_and(|c| c.is_uppercase()) {
             1.0
         } else {
             0.0
@@ -558,9 +563,8 @@ impl Encoder {
 
         // Dim 12: Academic/Latin-Greek suffix ratio
         let academic_suffixes: &[&str] = &[
-            "tion", "sion", "ment", "ness", "ical", "ious", "eous",
-            "ology", "istic", "ence", "ance", "ive", "ism", "ist",
-            "able", "ible", "ular", "uous", "ity", "phy", "thy",
+            "tion", "sion", "ment", "ness", "ical", "ious", "eous", "ology", "istic", "ence",
+            "ance", "ive", "ism", "ist", "able", "ible", "ular", "uous", "ity", "phy", "thy",
         ];
         let acad_count = words
             .iter()
@@ -612,21 +616,21 @@ impl Encoder {
         };
 
         [
-            token_count_norm,    // 0
-            ttr,                 // 1
-            mean_token_len,      // 2
-            dep_depth,           // 3
-            mean_clause_len,     // 4
-            lexical_density,     // 5
-            bigram_diversity,    // 6
-            sentence_rhythm,     // 7
-            vocab_richness,      // 8
-            length_variation,    // 9
-            rare_ratio,          // 10
-            clause_proxy,        // 11
-            academic_ratio,      // 12
-            polysyllabic_ratio,  // 13
-            char_entropy,        // 14
+            token_count_norm,   // 0
+            ttr,                // 1
+            mean_token_len,     // 2
+            dep_depth,          // 3
+            mean_clause_len,    // 4
+            lexical_density,    // 5
+            bigram_diversity,   // 6
+            sentence_rhythm,    // 7
+            vocab_richness,     // 8
+            length_variation,   // 9
+            rare_ratio,         // 10
+            clause_proxy,       // 11
+            academic_ratio,     // 12
+            polysyllabic_ratio, // 13
+            char_entropy,       // 14
         ]
     }
 
@@ -692,10 +696,10 @@ impl Encoder {
         let std_dev = variance.sqrt();
 
         [
-            (max_depth as f32 / 8.0).min(1.0),         // max depth normalised against 8
-            (mean / 4.0).min(1.0),                      // mean depth normalised against 4
-            (std_dev / 2.0).min(1.0),                   // std dev normalised against 2
-            (max_prep_depth as f32 / 6.0).min(1.0),     // max prepositional depth normalised against 6
+            (max_depth as f32 / 8.0).min(1.0), // max depth normalised against 8
+            (mean / 4.0).min(1.0),             // mean depth normalised against 4
+            (std_dev / 2.0).min(1.0),          // std dev normalised against 2
+            (max_prep_depth as f32 / 6.0).min(1.0), // max prepositional depth normalised against 6
         ]
     }
 
@@ -715,9 +719,8 @@ impl Encoder {
     fn compute_constituent_variance(words: &[String]) -> [f32; 2] {
         const COORDINATING: &[&str] = &["and", "or", "but", "nor", "so", "yet"];
         const SUBORDINATING_CONJ: &[&str] = &[
-            "that", "which", "who", "whom", "because", "although", "while", "since", "if",
-            "when", "unless", "after", "before", "until", "whether", "though", "whereas",
-            "whereby",
+            "that", "which", "who", "whom", "because", "although", "while", "since", "if", "when",
+            "unless", "after", "before", "until", "whether", "though", "whereas", "whereby",
         ];
 
         if words.is_empty() {
@@ -731,7 +734,9 @@ impl Encoder {
             let w = word.as_str();
             let lower = word.to_lowercase();
             let lower_str = lower.as_str();
-            if w == "," || w == ";" || w == ":"
+            if w == ","
+                || w == ";"
+                || w == ":"
                 || COORDINATING.contains(&lower_str)
                 || SUBORDINATING_CONJ.contains(&lower_str)
             {
@@ -808,18 +813,14 @@ impl Encoder {
         }
 
         let mean = positions.iter().sum::<f32>() / fw_count as f32;
-        let variance = positions
-            .iter()
-            .map(|p| (p - mean).powi(2))
-            .sum::<f32>()
-            / fw_count as f32;
+        let variance = positions.iter().map(|p| (p - mean).powi(2)).sum::<f32>() / fw_count as f32;
         let std_dev = variance.sqrt();
 
         // Density window dimensions
         let first_count = positions.iter().filter(|&&p| p < 1.0 / 3.0).count() as f32;
         let mid_count = positions
             .iter()
-            .filter(|&&p| p >= 1.0 / 3.0 && p < 2.0 / 3.0)
+            .filter(|&&p| (1.0 / 3.0..2.0 / 3.0).contains(&p))
             .count() as f32;
         let last_count = positions.iter().filter(|&&p| p >= 2.0 / 3.0).count() as f32;
         let fw_total = fw_count as f32;
@@ -829,11 +830,11 @@ impl Encoder {
         let fw_density_last = (last_count / fw_total).min(1.0);
 
         [
-            mean.min(1.0),           // mean function word position
+            mean.min(1.0),            // mean function word position
             (std_dev / 0.4).min(1.0), // std dev, norm against 0.4
-            fw_density_first,        // fraction of fw in first third
-            fw_density_mid,          // fraction of fw in middle third
-            fw_density_last,         // fraction of fw in last third
+            fw_density_first,         // fraction of fw in first third
+            fw_density_mid,           // fraction of fw in middle third
+            fw_density_last,          // fraction of fw in last third
         ]
     }
 
@@ -851,9 +852,9 @@ impl Encoder {
 
         [
             dep[0], dep[1], dep[2], dep[3], // dependency depth: max, mean, std_dev, prep_max
-            con[0], con[1],                  // constituent variance: std_dev, ratio
+            con[0], con[1], // constituent variance: std_dev, ratio
             fwe[0], fwe[1], fwe[2], fwe[3], fwe[4], // fw entropy: mean, std, first, mid, last
-            0.0,                             // pad
+            0.0,    // pad
         ]
     }
 
@@ -940,10 +941,7 @@ impl Encoder {
             "    G5 dep_depth: max={:.4} mean={:.4} std={:.4} prep_max={:.4}",
             dep[0], dep[1], dep[2], dep[3]
         );
-        println!(
-            "    G5 const_var: std={:.4} ratio={:.4}",
-            con[0], con[1]
-        );
+        println!("    G5 const_var: std={:.4} ratio={:.4}", con[0], con[1]);
         println!(
             "    G5 fw_entropy: mean={:.4} std={:.4} first={:.4} mid={:.4} last={:.4}",
             fwe[0], fwe[1], fwe[2], fwe[3], fwe[4]
@@ -979,12 +977,10 @@ impl Encoder {
         println!("    Group 2 — Syntactic features ({}d):", SYNTACTIC_DIMS);
         let labels = [
             "O1_len", "O2_len", "O3_len", "O4_len", "O5_len", "O6_len", "O7_len", "O8_len",
-            "len_var", "uniq_r", "func_wd", "max_len", "sent_ln", "punct", "caps",
-            "quest", "negat", "subord", "comma_d", "semi_cl", "parenth", "hyphen",
-            "short_r", "long_r", "len_rng", "init_cp",
-            "vowel_r", "cons_cl", "syl_cnt",
-            "rel_cls", "sub_cnt", "pron_dn", "cls_bnd",
-            "syl_prx", "hapax_r", "cmplx_s",
+            "len_var", "uniq_r", "func_wd", "max_len", "sent_ln", "punct", "caps", "quest",
+            "negat", "subord", "comma_d", "semi_cl", "parenth", "hyphen", "short_r", "long_r",
+            "len_rng", "init_cp", "vowel_r", "cons_cl", "syl_cnt", "rel_cls", "sub_cnt", "pron_dn",
+            "cls_bnd", "syl_prx", "hapax_r", "cmplx_s",
         ];
         for (i, (v, label)) in syntactic.iter().zip(labels.iter()).enumerate() {
             print!("      {:>7}: {:.4}", label, v);
@@ -992,7 +988,7 @@ impl Encoder {
                 println!();
             }
         }
-        if SYNTACTIC_DIMS % 4 != 0 {
+        if !SYNTACTIC_DIMS.is_multiple_of(4) {
             println!();
         }
         println!("    Group 3 — Token signal ({}d):", TOKEN_DIMS);
@@ -1006,10 +1002,8 @@ impl Encoder {
         println!();
         println!("    Group 4 — Complexity scalars ({}d):", SCALAR_DIMS);
         let scalar_labels = [
-            "tok_cnt", "TTR", "mean_ln", "dep_dep",
-            "cls_len", "lex_den", "bi_div", "rhythm",
-            "voc_rch", "len_var", "rare_r", "clause",
-            "pad_0", "pad_1", "pad_2",
+            "tok_cnt", "TTR", "mean_ln", "dep_dep", "cls_len", "lex_den", "bi_div", "rhythm",
+            "voc_rch", "len_var", "rare_r", "clause", "pad_0", "pad_1", "pad_2",
         ];
         for (v, label) in scalars.iter().zip(scalar_labels.iter()) {
             print!("      {:>7}: {:.4}", label, v);
@@ -1017,10 +1011,8 @@ impl Encoder {
         println!();
         println!("    Group 5 — Structural syntax ({}d):", STRUCTURAL_DIMS);
         let struct_labels = [
-            "dep_max", "dep_mea", "dep_std", "dep_pre",
-            "con_std", "con_rat",
-            "fw_mean", "fw_std", "fw_fst", "fw_mid", "fw_lst",
-            "pad",
+            "dep_max", "dep_mea", "dep_std", "dep_pre", "con_std", "con_rat", "fw_mean", "fw_std",
+            "fw_fst", "fw_mid", "fw_lst", "pad",
         ];
         for (v, label) in structural.iter().zip(struct_labels.iter()) {
             print!("      {:>7}: {:.4}", label, v);
@@ -1233,8 +1225,7 @@ mod tests {
         let tok = Tokeniser::new(100);
         let mut enc = Encoder::new(128, tok);
         let simple = enc.encode_text("the cat sat");
-        let complex =
-            enc.encode_text("because the cat, which was tired, sat down, it slept");
+        let complex = enc.encode_text("because the cat, which was tired, sat down, it slept");
         // Dependency depth proxy: G4 base (105) + dim 3
         let g4_base = NGRAM_DIMS + SYNTACTIC_DIMS + TOKEN_DIMS;
         assert!(
@@ -1281,7 +1272,9 @@ mod tests {
             assert!(
                 (tensor.data[i] - expected).abs() < 1e-6,
                 "G1 dim {}: expected {:.6}, got {:.6}",
-                i, expected, tensor.data[i]
+                i,
+                expected,
+                tensor.data[i]
             );
         }
 
@@ -1292,7 +1285,9 @@ mod tests {
             assert!(
                 (tensor.data[g2_base + i] - expected).abs() < 1e-6,
                 "G2 dim {}: expected {:.6}, got {:.6}",
-                i, expected, tensor.data[g2_base + i]
+                i,
+                expected,
+                tensor.data[g2_base + i]
             );
         }
 
@@ -1303,7 +1298,9 @@ mod tests {
             assert!(
                 (tensor.data[g3_base + i] - expected).abs() < 1e-6,
                 "G3 dim {}: expected {:.6}, got {:.6}",
-                i, expected, tensor.data[g3_base + i]
+                i,
+                expected,
+                tensor.data[g3_base + i]
             );
         }
 
@@ -1314,7 +1311,9 @@ mod tests {
             assert!(
                 (tensor.data[g4_base + i] - expected).abs() < 1e-6,
                 "G4 dim {}: expected {:.6}, got {:.6}",
-                i, expected, tensor.data[g4_base + i]
+                i,
+                expected,
+                tensor.data[g4_base + i]
             );
         }
 
@@ -1325,7 +1324,9 @@ mod tests {
             assert!(
                 (tensor.data[g5_base + i] - expected).abs() < 1e-6,
                 "G5 dim {}: expected {:.6}, got {:.6}",
-                i, expected, tensor.data[g5_base + i]
+                i,
+                expected,
+                tensor.data[g5_base + i]
             );
         }
     }
@@ -1446,7 +1447,8 @@ mod tests {
         // High function word content
         let function_heavy = enc.encode_text("the cat is on the mat in the room");
         // Low function word content (high lexical density)
-        let content_heavy = enc.encode_text("quantum mechanics describes fundamental particle interactions");
+        let content_heavy =
+            enc.encode_text("quantum mechanics describes fundamental particle interactions");
         // Lexical density: G4 base (105) + dim 5
         let g4_base = NGRAM_DIMS + SYNTACTIC_DIMS + TOKEN_DIMS;
         assert!(
@@ -1462,7 +1464,8 @@ mod tests {
         let tok = Tokeniser::new(200);
         let mut enc = Encoder::new(128, tok);
         let repeated = enc.encode_text("the cat the cat the cat the cat");
-        let diverse = enc.encode_text("quantum mechanics describes fundamental particle interactions");
+        let diverse =
+            enc.encode_text("quantum mechanics describes fundamental particle interactions");
         // Bigram diversity: G4 base (105) + dim 6
         let g4_base = NGRAM_DIMS + SYNTACTIC_DIMS + TOKEN_DIMS;
         assert!(
@@ -1493,8 +1496,12 @@ mod tests {
         println!("\n=== Phase 14 Stage 1 Diagnostic (6 sentences) ===");
         for (text, is_simple) in &sentences {
             let t = enc.encode_text(text);
-            println!("  [{}] norm={:.4}  \"{}\"",
-                if *is_simple { "S" } else { "C" }, t.norm(), text);
+            println!(
+                "  [{}] norm={:.4}  \"{}\"",
+                if *is_simple { "S" } else { "C" },
+                t.norm(),
+                text
+            );
             if *is_simple {
                 simple_vecs.push(t);
             } else {
@@ -1533,13 +1540,17 @@ mod tests {
         println!("  Simple mean norm:  {:.4}", simple_norm);
         println!("  Complex mean norm: {:.4}", complex_norm);
         println!("  cos(simple_mean, complex_mean) = {:.4}", cos);
-        println!("  Norm gap (complex - simple):     {:.4}", complex_norm - simple_norm);
+        println!(
+            "  Norm gap (complex - simple):     {:.4}",
+            complex_norm - simple_norm
+        );
 
         // Complex sentences should have higher norms due to more features firing
         assert!(
             complex_norm > simple_norm,
             "Complex norm ({:.4}) should exceed simple norm ({:.4})",
-            complex_norm, simple_norm
+            complex_norm,
+            simple_norm
         );
     }
 
@@ -1548,7 +1559,7 @@ mod tests {
         let tok = Tokeniser::new(1024);
         let mut enc = Encoder::new(128, tok);
 
-        let simple = vec![
+        let simple = [
             "a red ball",
             "open the door",
             "the moon is round",
@@ -1557,14 +1568,12 @@ mod tests {
             "rain falls from clouds",
             "we walked home slowly",
         ];
-        let complex = vec![
-            "the observer effect in quantum mechanics implies that measurement, by its very nature, fundamentally alters the state of the observed system",
+        let complex = ["the observer effect in quantum mechanics implies that measurement, by its very nature, fundamentally alters the state of the observed system",
             "autopoietic systems, while maintaining strict organisational closure, nonetheless remain thermodynamically open to continuous energy and matter exchange",
             "the no-free-lunch theorem establishes that no single optimisation algorithm can dominate across all possible problem classes without exception",
             "dialectical materialism posits that internal contradictions within socioeconomic structures, rather than external forces alone, drive historical transformation",
             "renormalisation group methods, when applied to systems near critical phase transitions, reveal universal scale-invariant behaviour across many physical phenomena",
-            "the frame problem in artificial intelligence highlights the fundamental difficulty of formally representing the implicit non-effects of actions within logical frameworks",
-        ];
+            "the frame problem in artificial intelligence highlights the fundamental difficulty of formally representing the implicit non-effects of actions within logical frameworks"];
 
         let dim = OUTPUT_DIM;
 
@@ -1573,15 +1582,23 @@ mod tests {
 
         let mut simple_mean = vec![0.0f32; dim];
         for v in &simple_vecs {
-            for (i, &val) in v.data.iter().enumerate() { simple_mean[i] += val; }
+            for (i, &val) in v.data.iter().enumerate() {
+                simple_mean[i] += val;
+            }
         }
-        for v in simple_mean.iter_mut() { *v /= simple_vecs.len() as f32; }
+        for v in simple_mean.iter_mut() {
+            *v /= simple_vecs.len() as f32;
+        }
 
         let mut complex_mean = vec![0.0f32; dim];
         for v in &complex_vecs {
-            for (i, &val) in v.data.iter().enumerate() { complex_mean[i] += val; }
+            for (i, &val) in v.data.iter().enumerate() {
+                complex_mean[i] += val;
+            }
         }
-        for v in complex_mean.iter_mut() { *v /= complex_vecs.len() as f32; }
+        for v in complex_mean.iter_mut() {
+            *v /= complex_vecs.len() as f32;
+        }
 
         let simple_t = Tensor::from_vec(simple_mean);
         let complex_t = Tensor::from_vec(complex_mean);
@@ -1598,7 +1615,10 @@ mod tests {
         }
         println!("Simple mean norm:  {:.4}", simple_t.norm());
         println!("Complex mean norm: {:.4}", complex_t.norm());
-        println!("Norm gap:          {:.4}", complex_t.norm() - simple_t.norm());
+        println!(
+            "Norm gap:          {:.4}",
+            complex_t.norm() - simple_t.norm()
+        );
         println!("cos(simple_mean, complex_mean) = {:.4}", cos);
 
         // Mean pairwise cos
@@ -1610,7 +1630,10 @@ mod tests {
                 count += 1;
             }
         }
-        println!("Mean pairwise cos(simple_i, complex_j) = {:.4}", sum_cos / count as f32);
+        println!(
+            "Mean pairwise cos(simple_i, complex_j) = {:.4}",
+            sum_cos / count as f32
+        );
 
         assert!(
             complex_t.norm() > simple_t.norm(),
@@ -1638,7 +1661,11 @@ mod tests {
             NGRAM_DIMS + SYNTACTIC_DIMS + TOKEN_DIMS + SCALAR_DIMS + STRUCTURAL_DIMS,
             128,
             "Group dimensions must sum to 128: {}+{}+{}+{}+{}",
-            NGRAM_DIMS, SYNTACTIC_DIMS, TOKEN_DIMS, SCALAR_DIMS, STRUCTURAL_DIMS
+            NGRAM_DIMS,
+            SYNTACTIC_DIMS,
+            TOKEN_DIMS,
+            SCALAR_DIMS,
+            STRUCTURAL_DIMS
         );
     }
 
@@ -1653,8 +1680,8 @@ mod tests {
 
         // Complex sentence with multiple embedding levels
         let complex = vec![
-            "the", "cat", "that", "the", "dog", "that", "the", "man",
-            "owned", "chased", "sat", "on", "the", "mat",
+            "the", "cat", "that", "the", "dog", "that", "the", "man", "owned", "chased", "sat",
+            "on", "the", "mat",
         ]
         .into_iter()
         .map(String::from)
@@ -1664,12 +1691,14 @@ mod tests {
         assert!(
             dep_complex[0] > dep_simple[0],
             "Max depth: complex={:.4} should exceed simple={:.4}",
-            dep_complex[0], dep_simple[0]
+            dep_complex[0],
+            dep_simple[0]
         );
         assert!(
             dep_complex[1] > dep_simple[1],
             "Mean depth: complex={:.4} should exceed simple={:.4}",
-            dep_complex[1], dep_simple[1]
+            dep_complex[1],
+            dep_simple[1]
         );
     }
 
@@ -1684,8 +1713,7 @@ mod tests {
 
         // Variable clause lengths: "the cat that the dog chased , sat"
         let variable = vec![
-            "the", "cat", "that", "the", "dog", "that", "the", "man",
-            "owned", "chased", ",", "sat",
+            "the", "cat", "that", "the", "dog", "that", "the", "man", "owned", "chased", ",", "sat",
         ]
         .into_iter()
         .map(String::from)
@@ -1695,12 +1723,14 @@ mod tests {
         assert!(
             con_variable[0] > con_uniform[0],
             "Constituent std_dev: variable={:.4} should exceed uniform={:.4}",
-            con_variable[0], con_uniform[0]
+            con_variable[0],
+            con_uniform[0]
         );
         assert!(
             con_variable[1] > con_uniform[1],
             "Constituent ratio: variable={:.4} should exceed uniform={:.4}",
-            con_variable[1], con_uniform[1]
+            con_variable[1],
+            con_uniform[1]
         );
     }
 
@@ -1724,7 +1754,8 @@ mod tests {
         assert!(
             fwe_front[0] < fwe_distributed[0],
             "Front-loaded mean position ({:.4}) should be less than distributed ({:.4})",
-            fwe_front[0], fwe_distributed[0]
+            fwe_front[0],
+            fwe_distributed[0]
         );
     }
 
@@ -1768,8 +1799,21 @@ mod tests {
 
         println!("\n=== Phase 14 Stage 1 — G5 Adversarial Feature Values ===");
         println!("\n  COMPLEX sentences (should escalate, stayed Surface in Phase 13):");
-        println!("  {:>4}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}",
-            "#", "dep_max", "dep_mea", "dep_std", "dep_pre", "con_std", "con_rat", "fw_mea", "fw_std", "fw_fst", "fw_lst", "norm");
+        println!(
+            "  {:>4}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}",
+            "#",
+            "dep_max",
+            "dep_mea",
+            "dep_std",
+            "dep_pre",
+            "con_std",
+            "con_rat",
+            "fw_mea",
+            "fw_std",
+            "fw_fst",
+            "fw_lst",
+            "norm"
+        );
 
         let mut complex_dep_sum = 0.0f32;
         let mut complex_con_sum = 0.0f32;
@@ -1789,8 +1833,21 @@ mod tests {
         }
 
         println!("\n  SIMPLE sentences (should stay Surface, escalated in Phase 13):");
-        println!("  {:>4}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}",
-            "#", "dep_max", "dep_mea", "dep_std", "dep_pre", "con_std", "con_rat", "fw_mea", "fw_std", "fw_fst", "fw_lst", "norm");
+        println!(
+            "  {:>4}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}  {:>7}",
+            "#",
+            "dep_max",
+            "dep_mea",
+            "dep_std",
+            "dep_pre",
+            "con_std",
+            "con_rat",
+            "fw_mea",
+            "fw_std",
+            "fw_fst",
+            "fw_lst",
+            "norm"
+        );
 
         let mut simple_dep_sum = 0.0f32;
         let mut simple_con_sum = 0.0f32;
@@ -1815,15 +1872,25 @@ mod tests {
         let simple_avg_con = simple_con_sum / simple_misclassified.len() as f32;
 
         println!("\n  Summary:");
-        println!("    Complex avg dep_max: {:.4}  Simple avg dep_max: {:.4}", complex_avg_dep, simple_avg_dep);
-        println!("    Complex avg con_std: {:.4}  Simple avg con_std: {:.4}", complex_avg_con, simple_avg_con);
-        println!("    G5 DISCRIMINATES: dep_max complex > simple = {}", complex_avg_dep > simple_avg_dep);
+        println!(
+            "    Complex avg dep_max: {:.4}  Simple avg dep_max: {:.4}",
+            complex_avg_dep, simple_avg_dep
+        );
+        println!(
+            "    Complex avg con_std: {:.4}  Simple avg con_std: {:.4}",
+            complex_avg_con, simple_avg_con
+        );
+        println!(
+            "    G5 DISCRIMINATES: dep_max complex > simple = {}",
+            complex_avg_dep > simple_avg_dep
+        );
 
         // Complex sentences should have higher average max dependency depth
         assert!(
             complex_avg_dep > simple_avg_dep,
             "Complex avg dep_max ({:.4}) should exceed simple avg dep_max ({:.4})",
-            complex_avg_dep, simple_avg_dep
+            complex_avg_dep,
+            simple_avg_dep
         );
     }
 }
