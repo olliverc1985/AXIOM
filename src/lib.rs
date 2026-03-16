@@ -1,8 +1,51 @@
-//! AXIOM Core — Adaptive eXecution with Intelligent Operations Memory
+//! AXIOM — Lightweight Rust ML framework for training and deploying small
+//! transformer classifiers. Zero external ML dependencies. Microsecond inference.
 //!
-//! Sparse dynamic routing architecture for cost-efficient LLM inference.
-//! Dual-encoder (structural + semantic) always-fuse design with 3-tier classification.
-//! Built from scratch in pure Rust — no external ML framework dependencies.
+//! # Quick Start
+//!
+//! ```
+//! use axiom::transformer::TransformerConfig;
+//! use axiom::vocab::Vocab;
+//! use axiom::encoder::SemanticEncoder;
+//! use axiom::classifier::ClassificationHead;
+//!
+//! // Build a small transformer encoder
+//! let vocab = Vocab::build_from_corpus(&["hello world".into()], 100);
+//! let config = TransformerConfig {
+//!     vocab_size: vocab.max_size,
+//!     hidden_dim: 128,
+//!     num_heads: 4,
+//!     num_layers: 2,
+//!     ff_dim: 512,
+//!     max_seq_len: 128,
+//!     pooling: "mean".to_string(),
+//!     activation: "gelu".to_string(),
+//! };
+//! let encoder = SemanticEncoder::new_with_config(vocab, config);
+//!
+//! // Build a 3-class classifier
+//! let head = ClassificationHead::new(256, 42);
+//! let input = vec![0.1f32; 256];
+//! let (class, confidence) = head.classify(&input);
+//! ```
+//!
+//! # Modules
+//!
+//! The public API is organised into clean, flat modules:
+//!
+//! - [`transformer`] — Configurable transformer encoder with forward/backward passes
+//! - [`vocab`] — Word-level vocabulary with frequency-based construction
+//! - [`encoder`] — Semantic encoder (transformer + pooling → fixed-size embeddings)
+//! - [`features`] — Deterministic structural text features (128-dim)
+//! - [`classifier`] — N-class classification head with softmax
+//! - [`router`] — LLM query router (example application built on the above)
+//! - [`training`] — STS pretraining, loss functions, data loading
+//! - [`optimiser`] — Adam optimiser with configurable learning rate
+//! - [`weights`] — JSON weight serialisation (save/load)
+//! - [`metrics`] — Accuracy, confusion matrix, Pearson correlation
+//!
+//! The internal implementation modules (`semantic`, `input`, `graph`, `tiers`,
+//! `cache`, `gpu`, `tuner`) are also public for advanced use.
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::manual_range_contains)]
 #![allow(clippy::too_many_arguments)]
@@ -12,6 +55,18 @@
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::approx_constant)]
 
+// ── Public API ─────────────────────────────────────────────────────
+pub mod classifier;
+pub mod encoder;
+pub mod features;
+pub mod metrics;
+pub mod optimiser;
+pub mod training;
+pub mod transformer;
+pub mod vocab;
+pub mod weights;
+
+// ── Internal implementation modules ────────────────────────────────
 pub mod cache;
 pub mod gpu;
 pub mod graph;
