@@ -1,0 +1,6002 @@
+[
+  {
+    "text": "What color is an emerald?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "How many states in the US?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'algorithm'",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "definition"
+  },
+  {
+    "text": "Is Tokyo in Japan?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does HTML stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "hello",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "good morning",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "hi there",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "what is 7 times 8",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "15 plus 27",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the boiling point of water?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Who painted the Mona Lisa?",
+    "tier": "Surface",
+    "domain": "art",
+    "category": "factual"
+  },
+  {
+    "text": "How many continents are there?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What is the chemical symbol for gold?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the largest desert on Earth",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What year did World War II end?",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "How many sides does a hexagon have?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "factual"
+  },
+  {
+    "text": "What is the freezing point of water in Celsius?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Who was the first president of the United States?",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "What language is spoken in Brazil?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many hours in a day?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the square root of 144?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "Name the primary colors",
+    "tier": "Surface",
+    "domain": "art",
+    "category": "factual"
+  },
+  {
+    "text": "What is H2O?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "How many planets in our solar system?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What does DNA stand for?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "acronym"
+  },
+  {
+    "text": "Is the sun a star?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What is the currency of Japan?",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "factual"
+  },
+  {
+    "text": "How many weeks in a year?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What does NASA stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "12 times 12",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the tallest mountain in the world?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'democracy'",
+    "tier": "Surface",
+    "domain": "humanities",
+    "category": "definition"
+  },
+  {
+    "text": "What color is the sky on a clear day?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Who wrote Hamlet?",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What continent is Egypt on?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many letters in the English alphabet?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "factual"
+  },
+  {
+    "text": "What is the atomic number of hydrogen?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the four seasons",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the longest river in the world?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "hey",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "thanks",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "goodbye",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "100 divided by 4",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What does GDP stand for?",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "acronym"
+  },
+  {
+    "text": "Is Australia a continent?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What sport uses a puck?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Who invented the telephone?",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "What is the smallest prime number?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'ecosystem'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Germany?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many ounces in a pound?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What gas do plants absorb?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the first element on the periodic table",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What color do you get mixing red and blue?",
+    "tier": "Surface",
+    "domain": "art",
+    "category": "factual"
+  },
+  {
+    "text": "Is a whale a mammal?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does USB stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "How many inches in a foot?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Italy?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "25 minus 13",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the national sport of Canada?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "How many bones in the adult human body?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "What is the chemical formula for table salt?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Who composed the Ninth Symphony?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "What does FAQ stand for?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "acronym"
+  },
+  {
+    "text": "Name the largest planet in our solar system",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What year was the Declaration of Independence signed?",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'metaphor'",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "definition"
+  },
+  {
+    "text": "How many grams in a kilogram?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the currency of the United Kingdom?",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "factual"
+  },
+  {
+    "text": "What organ pumps blood in the human body?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Is Mars bigger than Earth?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does PDF stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "9 plus 16",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the capital of Spain?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many chambers does the human heart have?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Name the author of Pride and Prejudice",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What color is a stop sign?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "How many degrees in a circle?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "factual"
+  },
+  {
+    "text": "What is the hardest natural substance?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'gravity'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What sport is played at Wimbledon?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "How many strings on a standard guitar?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Australia?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "50 times 3",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "Is the Pacific Ocean the largest ocean?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does CEO stand for?",
+    "tier": "Surface",
+    "domain": "business",
+    "category": "acronym"
+  },
+  {
+    "text": "Name the gas we breathe to survive",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What is the main ingredient in bread?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "How many zeros in a million?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "factual"
+  },
+  {
+    "text": "Who wrote The Odyssey?",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Canada?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'inflation'",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "definition"
+  },
+  {
+    "text": "What color are bananas when ripe?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "How many legs does a spider have?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What is the boiling point of water in Fahrenheit?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Is the Earth round?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does RAM stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "8 times 9",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the capital of Brazil?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Name the closest star to Earth",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many days in February during a leap year?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What instrument does a pianist play?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'velocity'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Russia?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many feet in a yard?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What fruit is associated with Newton and gravity?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Is copper a metal?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does WiFi stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "200 divided by 5",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "Name the largest mammal on Earth",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What is the national language of France?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many teeth does an adult human typically have?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'photon'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What sport does LeBron James play?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Mexico?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many quarts in a gallon?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What color is a ruby?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is nitrogen the most abundant gas in the atmosphere?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does ATM stand for?",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "acronym"
+  },
+  {
+    "text": "11 times 11",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "Who is known as the father of modern physics?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What is the main language spoken in Argentina?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many players on a soccer team?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'republic'",
+    "tier": "Surface",
+    "domain": "humanities",
+    "category": "definition"
+  },
+  {
+    "text": "What continent is India on?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Name the author of 1984",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What is the speed of sound approximately?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many minutes in an hour?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What planet has rings?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Is glass a solid or liquid?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does GPS stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "45 plus 55",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the capital of South Korea?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Name the ocean between Europe and North America",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What is the main ingredient in guacamole?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'chromosome'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "How many vowels in the English alphabet?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "factual"
+  },
+  {
+    "text": "What instrument has 88 keys?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "What country is the Eiffel Tower in?",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "Is the femur the longest bone?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does SOS stand for?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "acronym"
+  },
+  {
+    "text": "1000 minus 328",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the capital of Egypt?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many legs does an insect have?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the planet known as the Red Planet",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What is the pH of pure water?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'hypothesis'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What sport uses a shuttlecock?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "How many decades in a century?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Turkey?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is water wet?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does ASAP stand for?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "acronym"
+  },
+  {
+    "text": "6 squared",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the chemical symbol for iron?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the fastest land animal",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What country is the Great Wall in?",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "How many cups in a pint?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'sonnet'",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "definition"
+  },
+  {
+    "text": "What does MBA stand for?",
+    "tier": "Surface",
+    "domain": "business",
+    "category": "acronym"
+  },
+  {
+    "text": "What is the capital of Argentina?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is the Nile the longest river in Africa?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "20 percent of 200",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "Who painted The Starry Night?",
+    "tier": "Surface",
+    "domain": "art",
+    "category": "factual"
+  },
+  {
+    "text": "What is the main gas in the Earth's atmosphere?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many days in a leap year?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Name the vitamin you get from sunlight",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "What color is chlorophyll?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'CPU'",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "definition"
+  },
+  {
+    "text": "What sport does Tiger Woods play?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Sweden?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many tablespoons in a cup?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Is a tomato a fruit?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does IQ stand for?",
+    "tier": "Surface",
+    "domain": "psychology",
+    "category": "acronym"
+  },
+  {
+    "text": "7 cubed",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the chemical symbol for silver?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the largest continent",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Who composed Fur Elise?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "How many Olympics rings are there?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'peninsula'",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "definition"
+  },
+  {
+    "text": "What is sushi traditionally wrapped in?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "What does PhD stand for?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "acronym"
+  },
+  {
+    "text": "What is the capital of Norway?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is lightning hotter than the sun's surface?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "half of 86",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What gas makes balloons float?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the inventor of the light bulb",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "What country is Mount Fuji in?",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "How many seconds in a minute?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'capitalism'",
+    "tier": "Surface",
+    "domain": "humanities",
+    "category": "definition"
+  },
+  {
+    "text": "What is a baby dog called?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What does RSVP stand for?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "acronym"
+  },
+  {
+    "text": "What is the capital of Poland?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is a dolphin a fish?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "3 to the power of 4",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What organ is responsible for filtering blood?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Name the largest bone in the human body",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "What metal is liquid at room temperature?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many notes in a musical octave?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'habitat'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the main currency used in Europe?",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "factual"
+  },
+  {
+    "text": "What sport is played on a diamond?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Thailand?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is Antarctica a country?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does ETA stand for?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "acronym"
+  },
+  {
+    "text": "square root of 81",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the study of earthquakes called?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Who discovered gravity?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What country has the most people?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many millimeters in a centimeter?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'osmosis'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the main ingredient in hummus?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Name Shakespeare's Scottish play",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Nigeria?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is mercury a planet and an element?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does VPN stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "14 times 7",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the largest internal organ?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Name the author of The Great Gatsby",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What peninsula is Italy shaped like?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many players on a basketball team on court?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'allegory'",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "definition"
+  },
+  {
+    "text": "What flower is associated with the Netherlands?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the capital of Greece?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is a penguin a bird?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does URL stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "cube root of 27",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What instrument does a violinist play?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Name the famous clock tower in London",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "What type of animal is a frog?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many sides does a pentagon have?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'empathy'",
+    "tier": "Surface",
+    "domain": "psychology",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Portugal?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What material are jeans made from?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is a bat a bird or a mammal?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does LED stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "18 plus 33",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "Who invented the printing press?",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "What is the longest bone in the arm?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Name the currency of India",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "factual"
+  },
+  {
+    "text": "How many wings does a butterfly have?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'tort'",
+    "tier": "Surface",
+    "domain": "law",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Finland?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What shape is a stop sign?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is the Great Barrier Reef in Australia?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does API stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "10 factorial",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What gas do humans exhale?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the sport with a shuttlecock and racket",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "What are the two houses of US Congress?",
+    "tier": "Surface",
+    "domain": "humanities",
+    "category": "factual"
+  },
+  {
+    "text": "How many chromosomes do humans have?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'keynesian economics'",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Indonesia?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What animal is Dumbo?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is Venus hotter than Mercury?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does HTTPS stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "99 plus 1",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What country invented pizza?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Name the three states of matter",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Who wrote Don Quixote?",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "How many eyes does a spider have?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'plaintiff'",
+    "tier": "Surface",
+    "domain": "law",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Chile?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What color is a sapphire?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is Mount Everest in the Himalayas?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does IoT stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "250 divided by 10",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What type of rock is marble?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the largest island in the world",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What is the national bird of the United States?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "How many points for a touchdown in American football?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'curriculum'",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of New Zealand?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What element has the symbol O?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Is a strawberry a berry?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does AI stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "13 times 13",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the main ingredient in pesto?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Name the river that runs through London",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What unit measures electrical resistance?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many carats in pure gold?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'subnet'",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Colombia?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What color are healthy gums?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Is bamboo a type of grass?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does ROI stand for?",
+    "tier": "Surface",
+    "domain": "business",
+    "category": "acronym"
+  },
+  {
+    "text": "What is 2 to the power of 10?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What instrument has keys, pedals, and strings?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Name the country shaped like a boot",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What gas is used in neon signs?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many syllables in the word 'banana'?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'amendment'",
+    "tier": "Surface",
+    "domain": "law",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Vietnam?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What fruit do raisins come from?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "Is a spider an insect?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does SQL stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "17 minus 9",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the study of fungi called?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the first animal in space",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "What continent is Brazil on?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many strings on a ukulele?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'stock market'",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Peru?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What blood type is the universal donor?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Is pluto still a planet?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does GPA stand for?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "acronym"
+  },
+  {
+    "text": "one third of 90",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the smallest country in the world?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Name the painting on the ceiling of the Sistine Chapel",
+    "tier": "Surface",
+    "domain": "art",
+    "category": "factual"
+  },
+  {
+    "text": "What is the most spoken language in the world?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "How many holes on a standard golf course?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'pedagogy'",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Saudi Arabia?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What color is the sunset?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is helium lighter than air?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does STEM stand for?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "acronym"
+  },
+  {
+    "text": "What country is the Taj Mahal in?",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "What is the largest organ of the human body?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "Name the founder of Microsoft",
+    "tier": "Surface",
+    "domain": "business",
+    "category": "factual"
+  },
+  {
+    "text": "How many keys on a standard piano?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'jurisprudence'",
+    "tier": "Surface",
+    "domain": "law",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Denmark?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What element do we breathe that is number 8 on the periodic table?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Is the Dead Sea actually a lake?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does HTTP stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "24 times 5",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What country hosted the 2020 Olympics?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Name the tallest building in the world",
+    "tier": "Surface",
+    "domain": "engineering",
+    "category": "factual"
+  },
+  {
+    "text": "What is the SI unit of force?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "How many stripes on the American flag?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'neuron'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "yo",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "howdy",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "sup",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "greeting"
+  },
+  {
+    "text": "Why do we get jet lag when traveling across time zones?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "What are the pros and cons of remote work?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "How does a vaccine trigger an immune response?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare renewable and non-renewable energy sources",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do leaves change color in autumn?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "How does compound interest work?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare TCP and UDP protocols",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "comparison"
+  },
+  {
+    "text": "What happens to the body during a fever and why?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain the water cycle step by step",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "process"
+  },
+  {
+    "text": "How does supply and demand affect pricing?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why does the moon appear to change shape?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the judicial systems of the US and UK",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "How does an internal combustion engine work?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the differences between a democracy and a republic?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we dream and what purpose might dreams serve?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how GPS determines your location",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What factors contribute to inflation?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "How does natural selection drive evolution?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare classical and operant conditioning",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some materials conduct electricity and others don't?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a bill becomes law in the United States",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "process"
+  },
+  {
+    "text": "What causes ocean tides?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "How does a blockchain verify transactions?",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the French and American Revolutions",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does exercise improve mental health?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how solar panels convert sunlight to electricity",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the key differences between stocks and bonds?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the greenhouse effect work?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare Impressionism and Expressionism in art",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do antibiotics not work against viruses?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a search engine ranks web pages",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What causes earthquakes along tectonic plate boundaries?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the advantages of electric vs gasoline vehicles",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the electoral college system work?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why is the sky blue during the day but red at sunset?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how memory is formed and stored in the brain",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What factors determine a country's credit rating?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "How does a nuclear reactor generate electricity?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the Renaissance and the Enlightenment periods",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does salt lower the freezing point of water?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how machine learning differs from traditional programming",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "comparison"
+  },
+  {
+    "text": "What role does the Federal Reserve play in the economy?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "How do plate tectonics shape the Earth's surface over time?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the educational philosophies of Montessori and traditional schooling",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some people have allergies while others don't?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain the process of photosynthesis step by step",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "process"
+  },
+  {
+    "text": "How does a trade deficit impact a national economy?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the writing styles of Hemingway and Faulkner",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does food spoil and how does refrigeration prevent it?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how encryption protects data in transit",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the psychological stages of grief?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "process"
+  },
+  {
+    "text": "How does an MRI machine create images of the body?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare parliamentary and presidential systems of government",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does altitude affect cooking times?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how sound travels through different media",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "What economic factors led to the 2008 financial crisis?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "How does a compiler differ from an interpreter?",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "comparison"
+  },
+  {
+    "text": "Compare the ethical frameworks of utilitarianism and deontology",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we get goosebumps when cold or scared?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how vaccines achieve herd immunity",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does gerrymandering affect election outcomes?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare Baroque and Classical music periods",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do metal objects feel colder than wooden ones at the same temperature?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain the process of cellular respiration",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "process"
+  },
+  {
+    "text": "How does dopamine influence motivation and reward?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the causes of World War I and World War II",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do airplanes fly and what forces are involved?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a relational database manages data",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the benefits and risks of nuclear energy?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the immune system distinguish self from non-self?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the philosophies of Plato and Aristotle",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does ice float on water?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how containerization changed software deployment",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "analysis"
+  },
+  {
+    "text": "How does currency exchange rate affect international trade?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the nervous system and the endocrine system",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do different regions have different soil types?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how CRISPR gene editing works at a basic level",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the tradeoffs between SQL and NoSQL databases?",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "comparison"
+  },
+  {
+    "text": "How does urbanization affect local climate?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the American and Japanese education systems",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we yawn and is it really contagious?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how credit scores are calculated",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the ozone layer protect life on Earth?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the strategies of guerrilla and conventional warfare",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some metals rust while others don't?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a neural network learns from data",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the main arguments for and against capital punishment?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "How does muscle memory develop through practice?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare how different cultures approach aging and elder care",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do hurricanes rotate in different directions in each hemisphere?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how sourdough fermentation works",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does progressive taxation differ from flat taxation?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "What factors determine whether a species goes extinct?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare realism and idealism in international relations",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do optical illusions trick our brain?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a suspension bridge distributes weight",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does antibiotic resistance develop over time?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the Industrial Revolution in Britain and Germany",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do economies go through boom and bust cycles?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how version control helps software development teams",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "analysis"
+  },
+  {
+    "text": "What role does the jury play in the legal system?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "analysis"
+  },
+  {
+    "text": "How does cognitive behavioral therapy work?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the themes in Greek and Norse mythology",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we need sleep and what happens if we don't get enough?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a transistor works as a switch",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does gentrification affect existing communities?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare agile and waterfall project management methodologies",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we see lightning before we hear thunder?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a heat pump works for both heating and cooling",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "What makes a good leader versus a good manager?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "How does peer pressure influence adolescent decision-making?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the symbolism in Eastern and Western art",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does music evoke emotional responses?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how DNS resolution works when you type a URL",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "process"
+  },
+  {
+    "text": "How does deforestation contribute to climate change?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the healthcare systems of the US, UK, and Canada",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does the Doppler effect change the pitch of a siren?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how crop rotation benefits agriculture",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the psychological effects of social media on teenagers?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the architectural styles of Gothic and Renaissance buildings",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does yeast make bread rise?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a VPN protects your privacy online",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "How do interest rates affect the housing market?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the narrative techniques of first person and third person omniscient",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some foods taste better the next day?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how carbon dating determines the age of artifacts",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the main causes of income inequality?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "How does bilingual education affect cognitive development?",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the legal concepts of negligence and strict liability",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some people learn better visually while others learn auditorily?",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a catalytic converter reduces vehicle emissions",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the placebo effect work and why is it significant?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the economic models of capitalism and socialism",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do languages evolve and change over time?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how containerized shipping transformed global trade",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "analysis"
+  },
+  {
+    "text": "How does the Coriolis effect influence weather patterns?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the coaching styles of different legendary sports coaches",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do older buildings often survive earthquakes better than modern ones?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a microwave oven heats food",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "What factors make a startup more likely to succeed?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "analysis"
+  },
+  {
+    "text": "How does the brain process and interpret pain?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare how different religions view the afterlife",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does marble deteriorate in acidic environments?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how A/B testing helps improve products",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does sleep deprivation affect cognitive performance?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the impact of television and the internet on society",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does water expand when it freezes?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a pacemaker regulates heart rhythm",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "How do tariffs affect domestic and international markets?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the guitar techniques used in jazz and classical music",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do islands often have unique species found nowhere else?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how load balancing works in web architecture",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the key principles of effective negotiation?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "analysis"
+  },
+  {
+    "text": "How does altitude training benefit athletes?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the approaches to criminal rehabilitation in different countries",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some wines improve with age while others don't?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how color theory applies to graphic design",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does inflation erode purchasing power over time?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the benefits of standardized testing versus portfolio assessment",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do batteries lose capacity over repeated charge cycles?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a turbocharger increases engine power",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "What historical factors led to the fall of the Roman Empire?",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "analysis"
+  },
+  {
+    "text": "How does spaced repetition improve long-term memory retention?",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the storytelling techniques in film and theater",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do tropical regions have more biodiversity than polar regions?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a sewage treatment plant purifies wastewater",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "process"
+  },
+  {
+    "text": "How does emotional intelligence affect workplace relationships?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare different methods of conflict resolution",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we experience time differently when bored vs. engaged?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how fractional reserve banking works",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the Maillard reaction affect the flavor of cooked food?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the immigration policies of three different countries",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do coral reefs bleach and what are the consequences?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how an electric motor converts electricity to motion",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does trauma affect brain development in children?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the approaches to urban planning in European and American cities",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does caffeine keep us awake?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how optical fiber transmits data using light",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the economic implications of an aging population?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "How does the scoring system in tennis work and why is it unusual?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the literary movements of Romanticism and Realism",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does humidity make hot weather feel even hotter?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a 3D printer builds objects layer by layer",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does brand loyalty affect consumer purchasing decisions?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the health benefits of aerobic versus anaerobic exercise",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does overfishing threaten marine ecosystems?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain the concept of opportunity cost with examples",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "How do different tuning systems affect the sound of music?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the artistic movements of Cubism and Surrealism",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some countries drive on the left and others on the right?",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how noise-canceling headphones work",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does diversification reduce investment risk?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "What factors influence voter turnout in elections?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare different approaches to teaching reading to children",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does the body shiver when it's cold?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how photovoltaic cells generate electricity from light",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How do building codes help prevent earthquake damage?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare how jazz and hip-hop use improvisation",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do prices at tourist attractions tend to be higher?",
+    "tier": "Reasoning",
+    "domain": "travel",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain the process of fermentation in winemaking",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "process"
+  },
+  {
+    "text": "How do trade agreements affect small domestic businesses?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "analysis"
+  },
+  {
+    "text": "What are the advantages and disadvantages of plea bargaining?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does the equator receive more direct sunlight than the poles?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a recommendation algorithm decides what to show you",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the structure of a haiku differ from a limerick?",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "Compare the training philosophies behind marathon and sprint running",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do different cooking oils have different smoke points?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how triage works in emergency medicine",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "process"
+  },
+  {
+    "text": "How does venture capital funding differ from angel investing?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "Compare the effects of positive and negative reinforcement on behavior",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some materials are biodegradable while others are not?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a compiler optimizes code during compilation",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the use of perspective create depth in paintings?",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "mechanism"
+  },
+  {
+    "text": "What role does infrastructure play in economic development?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the philosophies of stoicism and epicureanism",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do marathoners hit 'the wall' around mile 20?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how water desalination works",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the adversarial legal system seek to find the truth?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the effects of different leadership styles on team performance",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do time zones follow irregular boundaries in some regions?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how mutual funds pool and manage investor money",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does the architecture of a concert hall affect sound quality?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the philosophical views of empiricism and rationalism",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "Why does cheese develop different flavors during aging?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how garbage collection works in programming languages",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "mechanism"
+  },
+  {
+    "text": "How does mindfulness meditation affect stress hormones?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What are the challenges of translating poetry between languages?",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare how different sports use analytics to improve performance",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do we experience nostalgia and what purpose does it serve?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "cause_effect"
+  },
+  {
+    "text": "How might quantum computing affect current encryption standards?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Is consciousness an emergent property of complex systems?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an experiment to test the Sapir-Whorf hypothesis",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the philosophical implications of the simulation hypothesis?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Is mathematics discovered or invented?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a distributed consensus algorithm for a heterogeneous network",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the ethical implications of CRISPR gene editing in humans?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "ethics"
+  },
+  {
+    "text": "Analyze the relationship between Gödel's incompleteness theorems and the limits of artificial intelligence",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "How would you design a fair algorithm for organ transplant allocation?",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "system_design"
+  },
+  {
+    "text": "Evaluate the epistemological foundations of the scientific method",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "What would be the socioeconomic consequences of achieving nuclear fusion energy?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an education system from scratch for a newly formed country",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the observer effect in quantum mechanics challenge classical notions of objectivity?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Propose a framework for regulating artificial general intelligence",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "system_design"
+  },
+  {
+    "text": "Analyze the tension between individual liberty and collective security in democratic societies",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "What are the implications of non-Euclidean geometry for our understanding of physical space?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a sustainable economic model for a post-scarcity society",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "system_design"
+  },
+  {
+    "text": "How might the discovery of extraterrestrial life reshape human philosophy and religion?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Critique the concept of intellectual property in the digital age",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "What are the cognitive and ethical implications of human-AI symbiosis?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "ethics"
+  },
+  {
+    "text": "Analyze the role of narrative in constructing historical truth",
+    "tier": "Deep",
+    "domain": "history",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an experiment to measure the effects of microgravity on plant evolution",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "research_design"
+  },
+  {
+    "text": "How should we weigh present costs against benefits for future generations in climate policy?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "ethics"
+  },
+  {
+    "text": "Evaluate the merits and limitations of universal basic income from multiple perspectives",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "What does the Chinese Room argument reveal about the nature of understanding?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a resilient power grid architecture for a city prone to natural disasters",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "How do cultural biases embedded in language models perpetuate systemic inequities?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the relationship between mathematical beauty and physical truth",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "philosophical"
+  },
+  {
+    "text": "Propose a legal framework for governing autonomous vehicles in mixed traffic",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the long-term psychological effects of living in virtual reality environments?",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a curriculum that integrates critical thinking across all subjects from kindergarten to 12th grade",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of entropy connect thermodynamics to information theory?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that all art is fundamentally political",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a clinical trial to evaluate the efficacy of a novel psychedelic-assisted therapy for PTSD",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the implications of the P vs NP problem for cryptography and computational theory?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze how the concept of the social contract has evolved from Hobbes to Rawls",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a biodiversity monitoring system using satellite imagery and machine learning",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "What ethical frameworks should guide decisions about extending human lifespan indefinitely?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "ethics"
+  },
+  {
+    "text": "Analyze the geopolitical implications of rare earth mineral scarcity",
+    "tier": "Deep",
+    "domain": "geography",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a peer-to-peer lending system that minimizes systemic risk",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "system_design"
+  },
+  {
+    "text": "How might the development of brain-computer interfaces reshape concepts of identity and privacy?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the effectiveness of restorative justice compared to punitive justice systems",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an experiment to investigate the neural correlates of aesthetic experience",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the philosophical implications of determinism for moral responsibility?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Propose a comprehensive strategy for transitioning a national economy from fossil fuels to renewables",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "Analyze how colonialism continues to shape global economic inequality",
+    "tier": "Deep",
+    "domain": "history",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a food system that could sustainably feed 10 billion people",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the Sapir-Whorf hypothesis relate to the development of programming languages?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the concept of cultural appropriation from multiple philosophical perspectives",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a monetary policy framework for a cryptocurrency-based national economy",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the epistemological limits of machine learning models in scientific discovery?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the role of myth and storytelling in the formation of national identity",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a space habitat that supports a self-sustaining human community of 1000 people",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "How should we conceptualize rights for non-human entities such as animals, ecosystems, or AI?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "ethics"
+  },
+  {
+    "text": "Evaluate the argument that technological progress is value-neutral",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a study to measure the long-term effects of early childhood music education on cognitive development",
+    "tier": "Deep",
+    "domain": "music",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the implications of quantum entanglement for our understanding of locality and causation?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the relationship between linguistic diversity and cognitive diversity in problem-solving",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a carbon credit trading system that prevents gaming and ensures genuine emission reductions",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of 'emergence' challenge reductionist explanations in science?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the long-term viability of democracy in an age of information warfare and deepfakes",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a healthcare delivery system optimized for rural and underserved populations",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the mathematical foundations needed to prove the Riemann hypothesis?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the ethical implications of predictive policing algorithms",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "ethics"
+  },
+  {
+    "text": "Design an adaptive learning platform that personalizes education using cognitive science principles",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "system_design"
+  },
+  {
+    "text": "How might a unified theory of physics change our understanding of the universe's origin?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the role of aesthetics in mathematical proof",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a city transportation network from scratch that minimizes environmental impact while maximizing accessibility",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the philosophical problems with defining personal identity over time?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the impact of algorithmic trading on market stability and fairness",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an experiment to test whether free will exists using neuroscience methods",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "research_design"
+  },
+  {
+    "text": "How should international law evolve to address cyberwarfare?",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that language shapes thought versus thought shapes language",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a decentralized governance system for a global commons like the ocean",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the topological constraints on possible shapes of the universe?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze how the concept of beauty has evolved across different philosophical traditions",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a training methodology for elite athletes that integrates mental health with physical performance",
+    "tier": "Deep",
+    "domain": "sports",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the fundamental limits of renewable energy storage technology?",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the ethical justification for whistleblowing in corporate and government contexts",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a research program to investigate the origins of human language",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "research_design"
+  },
+  {
+    "text": "How does category theory provide a unifying framework for mathematics?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the relationship between economic freedom and political freedom across nations",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a multi-generational strategy for terraforming Mars",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of chaos theory for long-range weather prediction?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that morality requires a metaphysical foundation",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a mentorship ecosystem for a large technology company that promotes diversity",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the many-worlds interpretation of quantum mechanics affect our understanding of probability?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the tension between copyright law and creative freedom in the digital era",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a comprehensive early warning system for pandemic outbreaks using global data streams",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the cognitive science implications of embodied cognition for AI development?",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the possibility and desirability of a universal moral framework",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a cross-cultural study to investigate how economic systems influence psychological well-being",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "research_design"
+  },
+  {
+    "text": "How might non-classical logics better model real-world reasoning than Boolean logic?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the philosophical significance of the Ship of Theseus for modern debates about identity",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a system for equitable distribution of scarce medical resources during a global crisis",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of epigenetics for the nature versus nurture debate?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the claim that artificial intelligence can never truly create art",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an economic model that accounts for natural capital and ecosystem services",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the halting problem limit what computers can theoretically compute?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the ethical dimensions of genetic enhancement versus genetic therapy",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a formal verification system for critical software in autonomous vehicles",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "system_design"
+  },
+  {
+    "text": "What would a post-humanist ethics look like and how would it differ from traditional frameworks?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the role of randomness in creative processes across art, music, and literature",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a longitudinal study on the impact of climate change on migration patterns over 50 years",
+    "tier": "Deep",
+    "domain": "geography",
+    "category": "research_design"
+  },
+  {
+    "text": "How does the incompleteness of formal systems relate to the limits of human knowledge?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the interplay between technological determinism and social construction of technology",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a just transition framework for communities dependent on fossil fuel industries",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the foundational challenges in building a mathematical theory of consciousness?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate whether the concept of 'just war' is coherent in the age of nuclear weapons",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a multi-stakeholder governance model for global internet regulation",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the topology of neural networks relate to their learning capabilities?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the philosophical implications of the multiverse theory for the concept of uniqueness",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a regenerative agriculture system for degraded soil in arid climates",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the ethical considerations of using AI in judicial sentencing decisions?",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "ethics"
+  },
+  {
+    "text": "Evaluate the argument that economic growth is fundamentally incompatible with environmental sustainability",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a research methodology for studying the long-term effects of social media on democratic discourse",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "research_design"
+  },
+  {
+    "text": "How might advances in neuroscience force us to rethink the legal concept of criminal intent?",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the relationship between mathematical structure and the fundamental nature of reality",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an interplanetary communication protocol that accounts for signal delay and data integrity",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the epistemological challenges of studying history and can objectivity be achieved?",
+    "tier": "Deep",
+    "domain": "history",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the prospects and risks of synthetic biology for environmental remediation",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a universal pre-K program that addresses socioeconomic disparities in school readiness",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of superposition challenge our intuitive understanding of reality?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the implications of deepfake technology for the concept of truth in journalism",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a comprehensive strategy for preserving endangered languages using technology",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "system_design"
+  },
+  {
+    "text": "What would a theory of everything need to unify and what obstacles remain?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the philosophical argument that we have moral obligations to future generations",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a scoring framework for measuring the true social impact of nonprofit organizations",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "system_design"
+  },
+  {
+    "text": "How do the principles of biomimicry apply to solving complex engineering challenges?",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the paradox of tolerance and its implications for free speech policy",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a controlled study to investigate the placebo effect across different cultural contexts",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the implications of computability theory for the philosophy of mind?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate whether the precautionary principle should guide all emerging technology regulation",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an AI ethics board structure that balances innovation with public safety",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the arrow of time emerge from time-symmetric physical laws?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the relationship between economic inequality and political polarization across democracies",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a water resource management plan for a drought-prone region facing population growth",
+    "tier": "Deep",
+    "domain": "geography",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of Bayesian reasoning for the philosophy of science?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that all knowledge is socially constructed",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a comprehensive rehabilitation program for post-concussion athletes integrating cognitive and physical recovery",
+    "tier": "Deep",
+    "domain": "sports",
+    "category": "system_design"
+  },
+  {
+    "text": "How should we define and measure 'quality of life' in a way that is culturally universal?",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the long-term consequences of automation on the nature of human work and meaning",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an archival system for preserving digital art across centuries of technological change",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the limits of formal logic in capturing natural language semantics?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the philosophical coherence of moral relativism",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a protocol for first contact with an extraterrestrial intelligence",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "How might advances in neuroplasticity research transform adult education?",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the ethical dimensions of geo-engineering to combat climate change",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a framework for measuring the effectiveness of international humanitarian aid",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "system_design"
+  },
+  {
+    "text": "What does the measurement problem in quantum mechanics tell us about the nature of observation?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate whether literature can provide genuine philosophical insight or merely illustration",
+    "tier": "Deep",
+    "domain": "literature",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a comprehensive ocean governance framework that balances economic exploitation with conservation",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "system_design"
+  },
+  {
+    "text": "How do the principles of complex adaptive systems apply to understanding economic markets?",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the relationship between musical structure and mathematical patterns across cultures",
+    "tier": "Deep",
+    "domain": "music",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a research program to investigate whether moral intuitions are innate or learned",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the theoretical limits of miniaturization in semiconductor technology beyond Moore's Law?",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the claim that photography ended painting's claim to represent reality",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a global pandemic preparedness treaty that addresses sovereignty concerns",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "system_design"
+  },
+  {
+    "text": "How might the development of artificial consciousness change our understanding of what it means to be human?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "What is the capital of Austria?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many teeth does a child have?",
+    "tier": "Surface",
+    "domain": "health",
+    "category": "factual"
+  },
+  {
+    "text": "What color is a fire truck?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'irony'",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "definition"
+  },
+  {
+    "text": "What does MBA stand for in business?",
+    "tier": "Surface",
+    "domain": "business",
+    "category": "acronym"
+  },
+  {
+    "text": "Is the Amazon the longest river?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "yes_no"
+  },
+  {
+    "text": "33 plus 44",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the smallest continent?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Name the largest cat species",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What country is the Colosseum in?",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "How many days in September?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "What is the symbol for potassium?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'equity'",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "definition"
+  },
+  {
+    "text": "What sport is played at Augusta National?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Is Jupiter a gas giant?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "72 divided by 8",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the capital of Switzerland?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Name the longest river in Europe",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What does ISBN stand for?",
+    "tier": "Surface",
+    "domain": "education",
+    "category": "acronym"
+  },
+  {
+    "text": "What is the main language of China?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many dimples on a golf ball approximately?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'variable'",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "definition"
+  },
+  {
+    "text": "What color is an amethyst?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is water a compound?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "16 times 4",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What animal is the symbol of the World Wildlife Fund?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Name the deepest ocean trench",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What does JPEG stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "What is the capital of Cuba?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many innings in a regulation baseball game?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'synopsis'",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "definition"
+  },
+  {
+    "text": "What is the smallest US state by area?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is mercury denser than water?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "55 minus 28",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What gas makes soda fizzy?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the country famous for maple syrup",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "What does BPM stand for in music?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "acronym"
+  },
+  {
+    "text": "What is the capital of Ireland?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many dots on a standard pair of dice?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'photovoltaic'",
+    "tier": "Surface",
+    "domain": "engineering",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Morocco?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is a mushroom a plant?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does OPEC stand for?",
+    "tier": "Surface",
+    "domain": "finance",
+    "category": "acronym"
+  },
+  {
+    "text": "19 times 5",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the hardest mineral on the Mohs scale?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the inventor of dynamite",
+    "tier": "Surface",
+    "domain": "history",
+    "category": "factual"
+  },
+  {
+    "text": "What continent is Kenya on?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "How many periods in a hockey game?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'solstice'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Ukraine?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What color is a school bus in the US?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Is sound faster in air or water?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does CSS stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "150 divided by 3",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the boiling point of alcohol approximately?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the author of War and Peace",
+    "tier": "Surface",
+    "domain": "literature",
+    "category": "factual"
+  },
+  {
+    "text": "What country is the Parthenon in?",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "How many cards in a standard deck?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'franchise'",
+    "tier": "Surface",
+    "domain": "business",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Belgium?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is platinum more expensive than gold?",
+    "tier": "Surface",
+    "domain": "general",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does rpm stand for?",
+    "tier": "Surface",
+    "domain": "engineering",
+    "category": "acronym"
+  },
+  {
+    "text": "77 minus 33",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the chemical formula for methane?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the planet with the Great Red Spot",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "What instrument does a drummer play?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "How many amendments in the US Bill of Rights?",
+    "tier": "Surface",
+    "domain": "law",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'alloy'",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of Hungary?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "What sport uses a velodrome?",
+    "tier": "Surface",
+    "domain": "sports",
+    "category": "factual"
+  },
+  {
+    "text": "Is an emu a bird that can fly?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does XML stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "double 47",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "arithmetic"
+  },
+  {
+    "text": "What is the tallest type of tree?",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "factual"
+  },
+  {
+    "text": "Name the Italian city known for its canals",
+    "tier": "Surface",
+    "domain": "travel",
+    "category": "factual"
+  },
+  {
+    "text": "What type of food is focaccia?",
+    "tier": "Surface",
+    "domain": "cooking",
+    "category": "factual"
+  },
+  {
+    "text": "How many movements in a typical symphony?",
+    "tier": "Surface",
+    "domain": "music",
+    "category": "factual"
+  },
+  {
+    "text": "Define 'hypothesis' in simple terms",
+    "tier": "Surface",
+    "domain": "science",
+    "category": "definition"
+  },
+  {
+    "text": "What is the capital of the Philippines?",
+    "tier": "Surface",
+    "domain": "geography",
+    "category": "factual"
+  },
+  {
+    "text": "Is a square a rectangle?",
+    "tier": "Surface",
+    "domain": "math",
+    "category": "yes_no"
+  },
+  {
+    "text": "What does LAN stand for?",
+    "tier": "Surface",
+    "domain": "technology",
+    "category": "acronym"
+  },
+  {
+    "text": "Why do some planets have more moons than others?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the advantages of centralized vs decentralized organizations",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "How does emotional contagion spread through groups?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "What factors determine the strength of a password?",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "analysis"
+  },
+  {
+    "text": "Why does stress cause physical symptoms like headaches?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the taste profiles of different coffee brewing methods",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "comparison"
+  },
+  {
+    "text": "How does GPS accuracy change in urban environments?",
+    "tier": "Reasoning",
+    "domain": "technology",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do desert temperatures vary drastically between day and night?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how compound interest differs from simple interest",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "Compare the impacts of clear-cutting vs selective logging",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "comparison"
+  },
+  {
+    "text": "How does sleep quality affect athletic performance?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do different instruments sound distinct playing the same note?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the regulatory approaches to data privacy in the US and EU",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "How does student loan debt affect economic mobility?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do migratory birds return to the same location each year?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare oil painting and watercolor techniques",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the gig economy change traditional employment relationships?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do some students excel in homeschooling while others struggle?",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a refrigerator uses the thermodynamic cycle",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare how different cultures celebrate the new year",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "How does regular meditation change brain structure over time?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do houses settle and crack over time?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the judicial review powers in different democracies",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "How does tourism impact local ecosystems?",
+    "tier": "Reasoning",
+    "domain": "travel",
+    "category": "analysis"
+  },
+  {
+    "text": "Why does eating spicy food cause sweating?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare different strategies for paying off debt",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "How does bilingualism affect the aging brain?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do volcanic islands form in chains?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the narrative structures of epic poetry and the modern novel",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "How does inflation affect retirement savings?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do certain songs get stuck in your head?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the effectiveness of prison vs community service for nonviolent offenses",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the Dunning-Kruger effect manifest in workplace settings?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Why does bread go stale?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the economic effects of a sales tax versus an income tax",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "How does geothermal energy compare to solar energy in terms of reliability?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do different regions develop different styles of architecture?",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how feedback loops can amplify climate change",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the effectiveness of online learning versus in-person learning",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "How does population density affect the spread of infectious diseases?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do some companies succeed with flat management structures?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the philosophical methods of Socrates and Descartes",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "How does soil composition affect the flavor of wine?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do airplane wings have curved surfaces?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare how different sports handle instant replay challenges",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "comparison"
+  },
+  {
+    "text": "How does access to green spaces affect urban mental health?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do hot drinks sometimes cool you down on a hot day?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the approaches to disaster preparedness across different countries",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "comparison"
+  },
+  {
+    "text": "How does music therapy help patients with neurological conditions?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do property values differ so much between neighborhoods?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a vaccine passport system works and its implications",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "analysis"
+  },
+  {
+    "text": "Compare the artistic techniques of fresco and mosaic",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the bystander effect influence emergency situations?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do some historical empires last centuries while others collapse quickly?",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare franchise and independent business ownership models",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "How does acid rain form and what are its effects?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "process"
+  },
+  {
+    "text": "Why do some languages have grammatical gender while others don't?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the health effects of saturated versus unsaturated fats",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "comparison"
+  },
+  {
+    "text": "How does a patent system encourage or hinder innovation?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "analysis"
+  },
+  {
+    "text": "Why does concrete crack in cold weather?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the benefits of team sports versus individual sports for youth development",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "comparison"
+  },
+  {
+    "text": "How does confirmation bias affect decision-making?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do coastal cities face higher flood risk than they did decades ago?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare how traditional and digital marketing reach different audiences",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the type of flour affect the texture of baked goods?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do certain medications require food while others must be taken on an empty stomach?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Explain how a capacitor stores and releases electrical energy",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the roles of mythology in Greek and Hindu cultures",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "How does urban sprawl affect commute times and quality of life?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do we find certain faces more attractive than others?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the taxation of capital gains vs ordinary income",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "How does weathering differ from erosion in shaping landscapes?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some diets work for certain people but not others?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare how ancient Rome and modern cities manage water supply",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the structure of a poem affect its meaning and impact?",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "analysis"
+  },
+  {
+    "text": "Why does dehydration impair cognitive performance?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the roles of apprenticeships in medieval and modern economies",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "How does color temperature in lighting affect mood and productivity?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do earthquakes cause tsunamis only sometimes?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the philosophical approaches of existentialism and nihilism",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the salinity of water affect marine life?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do some startups fail despite having good products?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the formats and strategies used in debate versus negotiation",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "How does altitude affect the taste and brewing of coffee?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do rivers meander instead of flowing in straight lines?",
+    "tier": "Reasoning",
+    "domain": "geography",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare print journalism and broadcast journalism in terms of depth and reach",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the speed of a pitch affect batting strategy in baseball?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do we procrastinate even when we know the deadline is approaching?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the effectiveness of monetary and fiscal policy during recessions",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the concept of diminishing returns apply to studying?",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do volcanoes produce different types of eruptions?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare how vinyl records and digital streaming reproduce sound",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "comparison"
+  },
+  {
+    "text": "How does cross-training benefit athletes and prevent injury?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do old photographs fade over time?",
+    "tier": "Reasoning",
+    "domain": "art",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the legal protections for employees versus independent contractors",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "comparison"
+  },
+  {
+    "text": "How does intermittent fasting affect metabolism?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do bridge designs vary so much across different rivers and terrains?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the use of metaphor in poetry versus political speech",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "How does groupthink lead to poor organizational decisions?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why does the moon influence spawning behavior in marine animals?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the approaches to wildlife conservation in Africa and North America",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the architecture of a courtroom reflect principles of justice?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "analysis"
+  },
+  {
+    "text": "Why does travel broaden perspectives and reduce prejudice?",
+    "tier": "Reasoning",
+    "domain": "travel",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the different types of vaccines and how each triggers immunity",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "comparison"
+  },
+  {
+    "text": "How does emulsification work in cooking sauces?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do interest rates and bond prices move in opposite directions?",
+    "tier": "Reasoning",
+    "domain": "finance",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the influence of ancient Greek philosophy on Western and Islamic thought",
+    "tier": "Reasoning",
+    "domain": "philosophy",
+    "category": "comparison"
+  },
+  {
+    "text": "How does an air traffic control system manage multiple planes simultaneously?",
+    "tier": "Reasoning",
+    "domain": "engineering",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do cultures develop different musical scales?",
+    "tier": "Reasoning",
+    "domain": "music",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the environmental impact of paper bags versus plastic bags",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the layout of a supermarket influence purchasing behavior?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do marathon times differ between men and women?",
+    "tier": "Reasoning",
+    "domain": "sports",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare how different countries approach freedom of the press",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "How does chronic stress affect the cardiovascular system?",
+    "tier": "Reasoning",
+    "domain": "health",
+    "category": "mechanism"
+  },
+  {
+    "text": "Why do some archaeological sites preserve organic material while others don't?",
+    "tier": "Reasoning",
+    "domain": "history",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the educational benefits of studying abroad versus studying locally",
+    "tier": "Reasoning",
+    "domain": "travel",
+    "category": "comparison"
+  },
+  {
+    "text": "How does the placebo effect demonstrate the mind-body connection?",
+    "tier": "Reasoning",
+    "domain": "psychology",
+    "category": "analysis"
+  },
+  {
+    "text": "Why do price wars hurt all companies involved?",
+    "tier": "Reasoning",
+    "domain": "business",
+    "category": "cause_effect"
+  },
+  {
+    "text": "Compare the symbolism of water in different literary traditions",
+    "tier": "Reasoning",
+    "domain": "literature",
+    "category": "comparison"
+  },
+  {
+    "text": "How should we balance individual privacy rights against collective public health needs in a pandemic?",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a reputation system for decentralized autonomous organizations that resists manipulation",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "system_design"
+  },
+  {
+    "text": "Analyze the philosophical tension between free market capitalism and environmental stewardship",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "What are the implications of neuromorphic computing for the future of artificial intelligence?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a framework for assessing the cultural impact of large infrastructure projects",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of path dependence explain the persistence of suboptimal institutions?",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the philosophical coherence of compatibilism as a resolution to the free will debate",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an educational assessment system that measures creativity alongside academic knowledge",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of quantum error correction for scalable quantum computing?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the role of central bank independence in maintaining monetary stability",
+    "tier": "Deep",
+    "domain": "finance",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an experiment to study the effects of artificial gravity on human physiology in space",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "research_design"
+  },
+  {
+    "text": "How might blockchain technology transform supply chain transparency and accountability?",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that museums should return all colonial-era artifacts to their countries of origin",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a system for measuring and comparing the quality of life across different nations",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the fundamental challenges in achieving artificial general intelligence?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze how the printing press transformed political power structures in Europe",
+    "tier": "Deep",
+    "domain": "history",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a comprehensive mental health support system for professional athletes",
+    "tier": "Deep",
+    "domain": "sports",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of Pareto efficiency apply to healthcare resource allocation?",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate whether intellectual property law stifles or promotes scientific progress",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a sustainable tourism model that benefits indigenous communities without exploiting their culture",
+    "tier": "Deep",
+    "domain": "travel",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of the holographic principle for our understanding of space-time?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze how game theory applies to international climate negotiations",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an experiment to determine whether plants exhibit a form of intelligence",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "research_design"
+  },
+  {
+    "text": "How should we assign moral status to increasingly sophisticated AI systems?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "ethics"
+  },
+  {
+    "text": "Evaluate the long-term implications of designer babies for human genetic diversity",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a food waste reduction system integrating supply chain optimization with consumer behavior change",
+    "tier": "Deep",
+    "domain": "cooking",
+    "category": "system_design"
+  },
+  {
+    "text": "What does the existence of undecidable problems tell us about the nature of mathematical truth?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the impact of streaming platforms on the creative independence of musicians",
+    "tier": "Deep",
+    "domain": "music",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a city-scale resilience plan that integrates climate adaptation with social equity",
+    "tier": "Deep",
+    "domain": "geography",
+    "category": "system_design"
+  },
+  {
+    "text": "How might the development of lab-grown meat reshape global agriculture and food ethics?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the philosophical foundations of animal rights versus animal welfare",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a research program to investigate the relationship between gut microbiome and mental health",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "research_design"
+  },
+  {
+    "text": "What are the epistemological implications of confirmation bias for scientific methodology?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the tension between national sovereignty and global governance in addressing climate change",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an economic incentive structure that promotes long-term corporate sustainability over short-term profits",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of supervenience relate to the mind-body problem?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the educational implications of Gardner's multiple intelligences theory",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a federated learning system that preserves individual privacy while enabling medical research",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of dark matter and dark energy for the standard model of physics?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the philosophical implications of the trolley problem for autonomous vehicle programming",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "ethics"
+  },
+  {
+    "text": "Design a cross-cultural study on the universality of basic emotions",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "research_design"
+  },
+  {
+    "text": "How might post-quantum cryptography reshape digital security infrastructure?",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that history is inevitably written by the victors",
+    "tier": "Deep",
+    "domain": "history",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a fair and efficient system for allocating limited water resources among competing agricultural, industrial, and residential users",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the philosophical challenges of defining and measuring poverty across cultures?",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze how zero-knowledge proofs could transform identity verification systems",
+    "tier": "Deep",
+    "domain": "technology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a longitudinal study on the cognitive effects of lifelong musical training",
+    "tier": "Deep",
+    "domain": "music",
+    "category": "research_design"
+  },
+  {
+    "text": "How does the concept of reflexivity in social science challenge traditional notions of objectivity?",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "philosophical"
+  },
+  {
+    "text": "Evaluate the merits of ranked-choice voting versus first-past-the-post for democratic representation",
+    "tier": "Deep",
+    "domain": "humanities",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design an ocean cleanup strategy that accounts for ecological impact and economic feasibility",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of artificial photosynthesis for solving the energy crisis?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the role of narrative empathy in literature as a driver of social change",
+    "tier": "Deep",
+    "domain": "literature",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a comprehensive framework for measuring the return on investment of public education",
+    "tier": "Deep",
+    "domain": "education",
+    "category": "system_design"
+  },
+  {
+    "text": "How does the concept of subsidiarity apply to global governance challenges?",
+    "tier": "Deep",
+    "domain": "law",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate whether aesthetic experience can be reduced to neurological processes",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design a dual-use research governance framework that balances scientific openness with biosecurity",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the mathematical and philosophical implications of infinite sets and transfinite numbers?",
+    "tier": "Deep",
+    "domain": "math",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze the impact of algorithmic content curation on the diversity of cultural consumption",
+    "tier": "Deep",
+    "domain": "art",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a study to investigate whether bilingual individuals process moral dilemmas differently in each language",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "research_design"
+  },
+  {
+    "text": "How might the development of programmable matter transform manufacturing and material science?",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the philosophical implications of the hard problem of consciousness for AI development",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an adaptive sports training program that uses biometric feedback and machine learning",
+    "tier": "Deep",
+    "domain": "sports",
+    "category": "system_design"
+  },
+  {
+    "text": "What challenges does the replication crisis pose for the credibility of social science research?",
+    "tier": "Deep",
+    "domain": "psychology",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Analyze how the concept of ubuntu philosophy could inform Western approaches to criminal justice",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a heritage preservation strategy for historic cities facing rapid modernization",
+    "tier": "Deep",
+    "domain": "history",
+    "category": "system_design"
+  },
+  {
+    "text": "How do network effects create winner-take-all dynamics in platform economies?",
+    "tier": "Deep",
+    "domain": "business",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Evaluate the argument that universal healthcare is a human right rather than a commodity",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "philosophical"
+  },
+  {
+    "text": "Design an interoperable electronic health records system that addresses both technical and ethical challenges",
+    "tier": "Deep",
+    "domain": "health",
+    "category": "system_design"
+  },
+  {
+    "text": "What are the implications of Heisenberg's uncertainty principle for philosophical realism?",
+    "tier": "Deep",
+    "domain": "science",
+    "category": "philosophical"
+  },
+  {
+    "text": "Analyze the role of cuisine in the construction and maintenance of cultural identity across diaspora communities",
+    "tier": "Deep",
+    "domain": "cooking",
+    "category": "expert_analysis"
+  },
+  {
+    "text": "Design a multi-modal transportation system for a megacity that reduces carbon emissions by 80% while maintaining accessibility",
+    "tier": "Deep",
+    "domain": "engineering",
+    "category": "system_design"
+  },
+  {
+    "text": "How should democratic societies handle the tension between majority rule and minority rights?",
+    "tier": "Deep",
+    "domain": "philosophy",
+    "category": "philosophical"
+  },
+  {
+    "text": "Compare how different societies define and celebrate heroism",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some languages have more words for certain colors than others?",
+    "tier": "Reasoning",
+    "domain": "humanities",
+    "category": "cause_effect"
+  },
+  {
+    "text": "How does the shape of a vessel affect the flavor perception of wine?",
+    "tier": "Reasoning",
+    "domain": "cooking",
+    "category": "mechanism"
+  },
+  {
+    "text": "Compare the benefits of mentorship programs versus self-directed learning",
+    "tier": "Reasoning",
+    "domain": "education",
+    "category": "comparison"
+  },
+  {
+    "text": "Why do some materials become superconductors at very low temperatures?",
+    "tier": "Reasoning",
+    "domain": "science",
+    "category": "cause_effect"
+  },
+  {
+    "text": "How does zoning law affect the character of a neighborhood over time?",
+    "tier": "Reasoning",
+    "domain": "law",
+    "category": "analysis"
+  }
+]
